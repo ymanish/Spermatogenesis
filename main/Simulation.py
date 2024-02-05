@@ -28,6 +28,23 @@ def func_cnt(arrs, ele):
     return tot_zero_els
 
 
+def delta_E(p, J ,s_l=0, s_r=0):
+    ### get the energy required to move from a bound state to unbound state
+    ## s_l and s_r are the left and right neighbours to the bound site.
+    ## refer to the task documentation for the derivation of the formulae. The energy here is in terms of Kb*T.
+
+    U = np.log(0.00244 * p)  ## in terms of KT
+
+    #     J=12.6/(1-s_l-s_r)
+
+    #     return (U + J)-J*0.5*(s_l+s_r)
+    return J * (s_l + s_r) + U
+def get_spin_value(v):
+    if v==2:
+        return 1
+    else:
+        return 0
+
 def site_opening(site_indexes, k_open):
     cl_sites_can_open = dict()
     sum_rate = 0
@@ -71,54 +88,101 @@ def site_closing(nuce, site_indexes, k_close):
 
     return unb_sites_can_close, sum_rate
 
+##### Without cooperativity
+# def unbound_site(nuce, op_indexes, pt_indexes, k_bind, cf, P):
+#     unb_sites = dict()
+#     # neigh_dict=dict()
+#     sum_rate = 0
+#     if len(op_indexes[0]) != 0:
+#
+#         if len(pt_indexes[0]) != 0:
+#
+#             for i in op_indexes[0]:
+#                 neig_count = 0
+#                 ###count for the neighbors
+#                 if max(i - 1, 0) in pt_indexes[0]:
+#                     k = i - 1
+#                     while nuce[max(k, 0)] == 2 and k >= 0:
+#                         neig_count += 1
+#                         k = k - 1
+#
+#                 if i + 1 in pt_indexes[0]:
+#                     k = i + 1
+#                     while nuce[min(k, 13)] == 2 and k <= 13:
+#                         neig_count += 1
+#                         k = k + 1
+#                 #                 print(P)
+#                 unb_sites[i] = k_bind * (1 + cf * neig_count) * P
+#         #             neigh_dict[i] = neig_count
+#         else:
+#             for i in op_indexes[0]:
+#                 unb_sites[i] = k_bind
+#
+#     if len(unb_sites) > 0:
+#         sum_rate = sum(unb_sites.values())
+#
+#     return unb_sites, sum_rate
 
+
+# def bound_site(pt_indexes, k_unbind):
+#     bd_sites = dict()
+#     sum_rate = 0
+#
+#     if len(pt_indexes[0]) != 0:
+#         for i in pt_indexes[0]:
+#             bd_sites[i] = k_unbind
+#
+#     if len(bd_sites) > 0:
+#         sum_rate = sum(bd_sites.values())
+#
+#     return bd_sites, sum_rate
+
+##### With Coooperativity
 def unbound_site(nuce, op_indexes, pt_indexes, k_bind, cf, P):
     unb_sites = dict()
     # neigh_dict=dict()
     sum_rate = 0
     if len(op_indexes[0]) != 0:
-
-        if len(pt_indexes[0]) != 0:
-
-            for i in op_indexes[0]:
-                neig_count = 0
-                ###count for the neighbors
-                if max(i - 1, 0) in pt_indexes[0]:
-                    k = i - 1
-                    while nuce[max(k, 0)] == 2 and k >= 0:
-                        neig_count += 1
-                        k = k - 1
-
-                if i + 1 in pt_indexes[0]:
-                    k = i + 1
-                    while nuce[min(k, 13)] == 2 and k <= 13:
-                        neig_count += 1
-                        k = k + 1
-                #                 print(P)
-                unb_sites[i] = k_bind * (1 + cf * neig_count) * P
-        #             neigh_dict[i] = neig_count
-        else:
-            for i in op_indexes[0]:
-                unb_sites[i] = k_bind
+        for i in op_indexes[0]:
+            unb_sites[i] = k_bind * P
 
     if len(unb_sites) > 0:
         sum_rate = sum(unb_sites.values())
 
     return unb_sites, sum_rate
 
-
-def bound_site(pt_indexes, k_unbind):
+def bound_site(nuce, pt_indexes, k_unbind, k_bind, P, J, B=1):
     bd_sites = dict()
     sum_rate = 0
+    beta = B
 
     if len(pt_indexes[0]) != 0:
         for i in pt_indexes[0]:
-            bd_sites[i] = k_unbind
+
+            if i == 0:
+                s_right = get_spin_value(nuce[i + 1])
+
+                #                 bd_sites[i] = k_unbind
+                bd_sites[i] = k_bind * P / math.exp(beta * delta_E(p=P, J=J, s_r=s_right))
+
+            elif i == 13:
+                s_left = get_spin_value(nuce[i - 1])
+
+                #                 bd_sites[i] = k_unbind
+                bd_sites[i] = k_bind * P / math.exp(beta * delta_E(p=P,  J=J, s_l=s_left))
+
+            else:
+                s_left = get_spin_value(nuce[i - 1])
+                s_right = get_spin_value(nuce[i + 1])
+
+                #                 bd_sites[i] = k_unbind
+                bd_sites[i] = k_bind * P / math.exp(beta * delta_E(p=P,  J=J, s_l=s_left, s_r=s_right))
 
     if len(bd_sites) > 0:
         sum_rate = sum(bd_sites.values())
 
     return bd_sites, sum_rate
+
 
 
 def calculate_rates(nucleosome, P_free, all_unbound_sites, k_open, k_close, k_unbind, k_bind, cf):
@@ -137,7 +201,7 @@ def calculate_rates(nucleosome, P_free, all_unbound_sites, k_open, k_close, k_un
 
     unbound_sites_rate, rate_bind = unbound_site(nucleosome, op_sites_indexes, pt_site_indexes, k_bind, cf, P_free)
 
-    bound_sites_rate, rate_unbind = bound_site(pt_site_indexes, k_unbind)
+    bound_sites_rate, rate_unbind = bound_site(nucleosome, pt_site_indexes, k_unbind, k_bind, P_free, cf)
 
     #     print(closed_sites, unbound_sites, bound_sites)
     # Calculate rate of each type of reaction
@@ -236,7 +300,7 @@ class system_init:
         self.k_bind = k_bind  # rate constant for protamines binding
         self.k_unbind = k_unbind  # rate constant for protamines unbinding
 
-        self.N = 200
+        self.N = 200 #### this is run for one nucleosome, how many iterations
         self.cooperativity_factor = cooperativity_factor
 
         self.nucleosomes = [np.zeros(14, dtype=int) for _ in range(self.num_nucleosomes)]
@@ -263,7 +327,7 @@ def main(my_conc, con_n,  k_open, k_close, k_bind, k_unbind, cop_factor, time_ru
     P_free_array_ALL = []
     N_bound_array_ALL = []
 
-    N_Iteration = 10
+    N_Iteration = 10 ## this is the number of nucleosome to run for, each run is independent of another, this is the sampling.
 
     for trac in range(N_Iteration):
         print('Iteration number ', trac)
@@ -275,7 +339,7 @@ def main(my_conc, con_n,  k_open, k_close, k_bind, k_unbind, cop_factor, time_ru
         ###I want to define the mayclass oject here with the same values for each loop
 
         for n in range(1, system_vars.N):
-            #         while system_vars.t < system_vars.t_max:
+             #         while system_vars.t < system_vars.t_max:
 
             # Calculate total number of unbound sites in all nucleosomes
             total_unbound_sites = func_cnt(system_vars.nucleosomes, ele=1)
@@ -352,10 +416,13 @@ def main(my_conc, con_n,  k_open, k_close, k_bind, k_unbind, cop_factor, time_ru
         P_free_array_ALL.append(system_vars.P_free)
         N_bound_array_ALL.append(system_vars.N_bound)
 
-    # times_ALL = np.array(times_ALL)
-    # N_closes_array_ALL = np.array(N_closes_array_ALL)
-    # N_bound_array_ALL = np.array(N_bound_array_ALL)
-    # N_open_array_ALL = np.array(N_open_array_ALL)
+    times_ALL = np.array(times_ALL)
+    N_closes_array_ALL = np.array(N_closes_array_ALL)
+    N_bound_array_ALL = np.array(N_bound_array_ALL)
+    N_open_array_ALL = np.array(N_open_array_ALL)
+
+    print(N_open_array_ALL)
+    print(times_ALL)
 
 
     bound_mean = mean(N_bound_array_ALL)
@@ -393,12 +460,12 @@ if __name__== '__main__':
 
     start = time.perf_counter()
 
-    concentration_dict = {'1': 0.1, '2': 0.2, '3': 0.4, '4': 0.7, '14': 0.8,
-                          '15': 0.9, '5': 1.0,
-                          '6': 1.3, '7': 1.6, '8': 1.9, '9': 2.2, '10': 2.5,
-                          '11': 2.8, '12': 3.1, '13': 3.5, '16': 4.0,
-                          '17':4.2, '18':5.0}
-
+    # concentration_dict = {'1': 0.1, '2': 0.2, '3': 0.4, '4': 0.7, '14': 0.8,
+    #                       '15': 0.9, '5': 1.0,
+    #                       '6': 1.3, '7': 1.6, '8': 1.9, '9': 2.2, '10': 2.5,
+    #                       '11': 2.8, '12': 3.1, '13': 3.5, '16': 4.0,
+    #                       '17':4.2, '18':5.0}
+    concentration_dict = {'1': 0.1}
 
     Sim_data = pd.DataFrame(columns=['C', 'bound_prot', 'nuc_open', 'nuc_closed'])
     shape_list = dict()
@@ -417,9 +484,12 @@ if __name__== '__main__':
         pool = []
         for i, (key, value) in enumerate(concentration_dict.items()):
             print(key, value)
-            pool.append(executor.submit(main, my_conc=value, con_n=key, k_open=21*float(sys.argv[2]),
-                                        k_close=21, k_bind=0.59,
-                                        k_unbind=241.59, cop_factor=float(sys.argv[3])))
+            # pool.append(executor.submit(main, my_conc=value, con_n=key, k_open=21*float(sys.argv[2]),
+            #                             k_close=21, k_bind=0.59,
+            #                             k_unbind=241.59, cop_factor=float(sys.argv[3])))
+            pool.append(executor.submit(main, my_conc=value, con_n=key, k_open=21 * float(sys.argv[2]),
+                                        k_close=21, k_bind=0,
+                                        k_unbind=0, cop_factor=float(sys.argv[3])))
 
         for j in concurrent.futures.as_completed(pool):
             bound_value, open_value, closed_value, time_value, con_value = j.result()
@@ -441,7 +511,9 @@ if __name__== '__main__':
     Sim_data['nuc_closed'] = temp_closed
     Sim_data['end_time'] = end_time
     print(Sim_data)
-    Sim_data.to_csv(RESULT_DIR + str(param_n)+"_param.csv")
+    ### Results 28/7 is with cooperativity included using the ising model
+    # file_path = r"/group/cmcb-files/pol_schiessel/05_Projekte/manish/Spermatogensis/results_28_7/" + str(param_n) + "_param.csv"
+    # Sim_data.to_csv(file_path)
 
 
     end = time.perf_counter()

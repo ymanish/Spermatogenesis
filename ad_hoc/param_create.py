@@ -1,6 +1,5 @@
 import itertools
 import numpy as np
-import radialtreerc
 
 
 ratio_range = np.arange(0.0, 1.1, 0.1, dtype=float)
