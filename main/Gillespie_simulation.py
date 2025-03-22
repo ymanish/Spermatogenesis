@@ -12,6 +12,10 @@ from initialise import *
 import concurrent.futures
 import time
 from operator import add
+import datetime
+import csv
+from nucleosome_breath import NucleosomeBreath
+
 
 def get_mean_value(array_ALL, time_run=False):
     temp_array = []
@@ -28,7 +32,7 @@ class nucleosme:
     SAXS_df = None
     stationary_array = None
 
-    def __init__(self, k_unwrap, k_wrap, num_nucleosomes, binding_sites=14):
+    def __init__(self, k_unwrap, k_wrap, num_nucleosomes, Nucleosome_breath_instance, binding_sites=14):
         self.k_unwrap = k_unwrap
         self.k_wrap = k_wrap
         self.binding_sites = binding_sites
@@ -37,6 +41,7 @@ class nucleosme:
         self.N_open = 0
         self.binding_bp_right = [7, 18, 30, 39, 50, 60, 70, 81, 91, 101, 112, 122, 132, 146]
         self.binding_bp_left = [0, 14, 24, 34, 45, 55, 65, 76, 86, 96, 107, 116, 128, 139]
+        self.nucleosome_breath = Nucleosome_breath_instance   
 
         if self.Olson_prob_df_di is None:
             self.Olson_prob_df_di = pd.read_csv(Olson_prob_di_loc)
@@ -58,7 +63,39 @@ class nucleosme:
 
         if self.stationary_array is None:
             self.stationary_array = np.loadtxt(SAXS_DIST)
+
+    
+           # Mask to select only the left side of the diagonal (including diagonal)
+            mask = np.zeros(self.stationary_array.shape, dtype=bool)
+            for i in range(self.stationary_array.shape[0]):
+                for j in range(self.stationary_array.shape[0]-i):
+                    mask[i, j] = 1
+
+            # Extracting the valid values
+            valid_values = self.stationary_array[mask]
+
+            # Calculate the standard deviation of these values
+            std_dev = np.std(valid_values)
+
+            noise_level = STD_DEV_NOISE * std_dev  # Define noise level as 10% of the standard deviation
             
+            # np.random.seed(0)
+
+            # Generate Gaussian noise
+            noise = np.random.normal(0, noise_level, self.stationary_array.shape)
+            noise[~mask] = 0
+            noise_masked = np.clip(noise, 0, None)  # Example: clipping to ensure non-negative values
+
+
+            self.stationary_array = self.stationary_array + noise_masked
+            # Normalize the stationary_array
+            self.stationary_array/= np.sum(self.stationary_array)
+
+            # l = random.randint(0, 14)
+            # r = random.randint(0, 14 - l)  # Select r such that r <= 14 - l
+
+            # self.stationary_array[l][r] = self.stationary_array[l][r] + NOISE
+
     def sequence(self):
         S = 'ACGCGGATCAAATTT'
         return S
@@ -119,13 +156,16 @@ class nucleosme:
         for _, row in self.MD_param_df[['steps', di_bp]].iterrows():
             step, value = row['steps'], row[di_bp]
             i, j = step.split('-')
-            matrix.at[i, j] = value * 1.69  ## multiplying with 1.69 makes it KT units from the kcal/mole
-            matrix.at[j, i] = value * 1.69  # since it's symmetri
+            # matrix.at[i, j] = value * 1.69  ## multiplying with 1.69 makes it KT units from the kcal/mole
+            # matrix.at[j, i] = value * 1.69  # since it's symmetri
+            matrix.at[i, j] = value  
+            matrix.at[j, i] = value   
 
 
         matrix_np = matrix.to_numpy()
         det_value = np.linalg.det(matrix_np)
         log_value = np.log(det_value)
+        # log_value = np.log((det_value*math.pow(180, 6))/(math.pow(10, 6)*math.pow(np.pi, 6))) ### this will convert it to nm and radians units
 
         return log_value
 
@@ -159,7 +199,7 @@ class nucleosme:
             cl_sites_can_open[close_site_ind[-1]] = self.k_unwrap
 
         else:
-            cl_sites_can_open[close_site_ind[0]] = 0.001
+            cl_sites_can_open[close_site_ind[0]] = LAST_SITE_OPENING_RATE
 
         if len(cl_sites_can_open) > 0:
             sum_rate = sum(cl_sites_can_open.values())
@@ -222,8 +262,6 @@ class nucleosme:
         sum_rate = 0
         beta = 1
 
-
-        seq_601 = 'CTGGAGAATCCCGGTGCCGAGGCCGCTCAATTGGTCGTAGACAGCTCTAGCACCGCTTAAACGCACGTACGCGCTGTCCCCCGCGTTTTAACCGCCAAGGGGATTACTCCCTAGTCTCCAGGCACGTGTCAGATATATACATCCTGT'
         # K_eq_601 = {'0': 1e-4, '1': 1e-5, '2': 4e-6, '3': 3e-6, '4': 2e-6, '5': 2e-6, '6': 1e-6, '7': 1e-6, '8': 3e-6, '9': 6e-6, '10': 3e-5, '11': 5e-5, '12': 3e-4, '13': 1e-5}
         # K_eq_601 = {'0': 1, '1': 1, '2': 1, '3': 1, '4': 1, '5': 1, '6': 1, '7': 1, '8': 1, '9': 1, '10': 1, '11': 1, '12': 1, '13': 1}
         # print(close_site_ind)
@@ -305,91 +343,51 @@ class nucleosme:
             return K_wrapped_rates, sum_rate 
 
 
+    def nucleosome_rewrapping(self, Seq, nuce, close_site_ind):
+        beta = 1
+        K_wrapped_rates = dict()
+        sum_rate = 0
+        print('<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
+        if len(close_site_ind) > 0:
 
-        # import sys
-        # sys.exit()
+            L = close_site_ind[0]
+            R = 13-close_site_ind[-1]
 
-        # # print(self.calculate_opening_bp(close_site_ind[0]))
-        # bp_unwrap_prev, bp_unwrap = self.calculate_opening_bp(close_site_ind[0])
+            if L-1>=0 and nuce[L-1]==1:
 
-        # # print(self.find_closest_fraction(bp_unwrap_prev))
-        # # print(self.find_closest_fraction(bp_unwrap))
-        # K_eq_601 = self.find_closest_fraction(bp_unwrap)/self.find_closest_fraction(bp_unwrap_prev)
+                unwrapped_cur_state = self.nucleosome_breath.select_phosphate_bind_sites(left=close_site_ind[0])
+                rewrap_state = self.nucleosome_breath.select_phosphate_bind_sites(left=close_site_ind[0]-1) 
+                F_rewrap, S_rewrap, E_rewrap, F_Free_rewrap = self.nucleosome_breath.calculate_free_energy(Seq, site_loc=rewrap_state) 
+                F_unwrapped, S_unwrapped, E_wrapped, F_free_unwrap = self.nucleosome_breath.calculate_free_energy(Seq, site_loc=unwrapped_cur_state)
+                print('Rewrap_state ', rewrap_state)
+                print('Unwrapped_state ', unwrapped_cur_state)
 
-        # # print(self.find_closest_fraction(self.calculate_opening_bp(close_site_ind[0])))
-        # if len(close_site_ind[0]) > 0:
+                delta_F_left = F_rewrap - F_unwrapped 
+                print('Left delta Engergy ', delta_F_left, F_rewrap, F_unwrapped)
+                K_wrapped_rates[close_site_ind[0]- 1] = self.k_unwrap * math.exp(-beta*delta_F_left)
 
-        #     if (nuce[close_site_ind[0][0] - 1] == 1) and (close_site_ind[0][0] - 1) >= 0:  ## checking if the nucleosome site left to the closed is open and not bound by protamines
-        #         left_start = self.binding_bp_left[close_site_ind[0][0] - 1]
-        #         # left_end = self.binding_bp_right[close_site_ind[0][0]]
-        #         left_end = self.binding_bp_left[close_site_ind[0][0]]
-        #         # print(left_start, left_end)
-        #         # print((seq[left_start:left_end + 1]))
-        #         # print('Left side length, ', len(seq[left_start:left_end]))
-
-
-        #         # left_closest_fraction = self.find_closest_fraction(left_end)
-        #         # last_left_closest_fraction = self.find_closest_fraction(left_start)
+            if R-1 >=0 and nuce[min(close_site_ind[-1]+1, 13)] == 1:
                 
-        #         # K_eq_unwrap = 
+                R_unwrapped_cur_state = self.nucleosome_breath.select_phosphate_bind_sites(right=close_site_ind[-1])
+                R_rewrap_state = self.nucleosome_breath.select_phosphate_bind_sites(right=close_site_ind[-1]+1) 
+
+                R_F_rewrap, R_S_rewrap, R_E_rewrap, R_F_rewrapn = self.nucleosome_breath.calculate_free_energy(Seq, site_loc=R_rewrap_state)
+                R_F_unwrapped, R_S_unwrapped, R_E_wrapped, R_F_unwrappedn = self.nucleosome_breath.calculate_free_energy(Seq, site_loc=R_unwrapped_cur_state)
 
 
-        #         E_elastic_left = self.Free_energy_wrapped_DNA(seq, left_start, left_end, self.DI_PROB_dict, self.MONO_PROB_dict)
+                print('Right_Rewrap_state ', R_rewrap_state)
+                print('Right_Unwrapped_state ', R_unwrapped_cur_state)
+                delta_F_right =  R_F_rewrap - R_F_unwrapped 
+                print('Right delta Engergy ', delta_F_right, R_F_rewrap, R_F_unwrapped)
+                K_wrapped_rates[close_site_ind[-1] + 1] = self.k_unwrap * math.exp(-beta*delta_F_right)
 
-        #         E_elastic_left_601 = self.Free_energy_wrapped_DNA(seq_601, left_start, left_end, self.DI_PROB_dict, self.MONO_PROB_dict)
-        #         # print('Left Elastic energry for test DNA and 601 DNA ', E_elastic_left, E_elastic_left_601)
-
-        #         E_free_DNA_left = self.Free_DNA(seq, left_start, left_end)
-        #         E_free_DNA_left_601 = self.Free_DNA(seq_601, left_start, left_end)
-
-        #         # print('Left Free DNA energy for test DNA and 601 DNA', E_free_DNA_left, E_free_DNA_left_601	)
-
-        #         # K_wrapped_rates[close_site_ind[0][0] - 1] = self.k_unwrap * math.exp(
-        #         #     -beta * (E_elastic_left - E_free_DNA_left + alpha*len(seq[left_start:left_end + 1])))
-                
-
-        #         # prefactor = K_eq_601[str(int(close_site_ind[0][0]-1))]
-
-        #         K_wrapped_rates[close_site_ind[0][0] - 1] = self.k_unwrap /K_eq_601*(math.exp(
-        #             -beta * ((E_free_DNA_left_601 - E_elastic_left_601)  - (E_free_DNA_left-E_elastic_left)+ alpha))) 
-                
-        #         # K_wrapped_rates[close_site_ind[0][0] - 1] = self.k_unwrap /prefactor*(math.exp(
-        #         #     -beta * (-np.log(prefactor) - (E_elastic_left - E_free_DNA_left)+ alpha))) 
-
-        #     # print('Right-------------------------------')
-        #     if close_site_ind[0][-1] != 13:
-        #         if nuce[close_site_ind[0][-1]+ 1] == 1:
-        #             right_start = self.binding_bp_right[close_site_ind[0][-1]]
-        #             # right_start = self.binding_bp_left[close_site_ind[0][-1]]
-        #             right_end = self.binding_bp_right[close_site_ind[0][-1] + 1]
-        #             #
-        #             # print(right_start, right_end)
-        #             # print(seq[right_start:right_end + 1])
-        #             # print('Rigth side length ', len(seq[right_start:right_end + 1]))
-
-        #             E_elastic_right = self.Free_energy_wrapped_DNA(seq, right_start, right_end, self.DI_PROB_dict, self.MONO_PROB_dict)
-        #             E_elastic_right_601 = self.Free_energy_wrapped_DNA(seq_601, right_start, right_end, self.DI_PROB_dict, self.MONO_PROB_dict)
-
-        #             # print('Right Elastic energry for test DNA and 601 DNA ', E_elastic_right, E_elastic_right_601)
-
-        #             E_free_DNA_right = self.Free_DNA(seq, right_start, right_end)
-        #             E_free_DNA_right_601 = self.Free_DNA(seq_601, right_start, right_end)
-
-        #             # print('Right Free_DNA_energy for 601 DNA', E_free_DNA_right, E_free_DNA_right_601)
-
-        #             # K_wrapped_rates[close_site_ind[0][-1] + 1] = self.k_unwrap * math.exp(
-        #             #     -beta * (E_elastic_right - E_free_DNA_right + alpha*len(seq[right_start:right_end + 1])))
-
-        #             # prefactor = K_eq_601[str(int(close_site_ind[0][-1]+1))]
-
-
-        #             K_wrapped_rates[close_site_ind[0][-1] + 1] = self.k_unwrap /K_eq_601*(math.exp( -beta * ((E_free_DNA_right_601 - E_elastic_right_601) - (E_free_DNA_right - E_elastic_right)+ alpha)))
-
-
-        # if len(K_wrapped_rates) > 0:
-        #     sum_rate = sum(K_wrapped_rates.values())
-        # # print('Wrapping rates ', K_wrapped_rates)
-        # return K_wrapped_rates, sum_rate
+        if len(K_wrapped_rates) > 0:  
+            sum_rate = sum(K_wrapped_rates.values())
+            # print('Wrapping rates ', K_wrapped_rates)
+            return K_wrapped_rates, sum_rate
+        
+        else:
+            return K_wrapped_rates, sum_rate   
 
 
 class protamines:
@@ -520,20 +518,20 @@ class protamines:
                     s_right = self.get_spin_value(nuce[i + 1])
 
                     #                 bd_sites[i] = k_unbind
-                    bd_sites[i] = self.k_bind * self.P_free / math.exp(beta * self.delta_E(p=self.P_free, J=J, s_r=s_right))
+                    bd_sites[i] = (self.k_bind * self.P_free )/ math.exp(beta * self.delta_E(p=self.P_free, J=J, s_r=s_right))
 
                 elif i == 13:
                     s_left = self.get_spin_value(nuce[i - 1])
 
                     #                 bd_sites[i] = k_unbind
-                    bd_sites[i] = self.k_bind * self.P_free / math.exp(beta * self.delta_E(p=self.P_free, J=J, s_l=s_left))
+                    bd_sites[i] = (self.k_bind * self.P_free) / math.exp(beta * self.delta_E(p=self.P_free, J=J, s_l=s_left))
 
                 else:
                     s_left = self.get_spin_value(nuce[i - 1])
                     s_right = self.get_spin_value(nuce[i + 1])
 
                     #                 bd_sites[i] = k_unbind
-                    bd_sites[i] = self.k_bind * self.P_free / math.exp(beta * self.delta_E(p=self.P_free, J=J, s_l=s_left, s_r=s_right))
+                    bd_sites[i] = (self.k_bind * self.P_free) / math.exp(beta * self.delta_E(p=self.P_free, J=J, s_l=s_left, s_r=s_right))
             # print('Function Bpund Site Pfree', self.P_free)
             # print('Function Bpund Site Kbind' ,self.k_bind)
             # print('Function Bpund Site J', J)
@@ -544,45 +542,44 @@ class protamines:
 
 
 
-class Simulation(nucleosme, protamines):
-    def __init__(self, k_unwrap, k_wrap, k_unbind, k_bind, p_conc, num_nucleosomes, sequence, cooperativity=1, binding_sites=14, N=1000):
-
-        nucleosme.__init__(self, k_unwrap, k_wrap, num_nucleosomes, binding_sites)
-        protamines.__init__(self, k_unbind, k_bind, p_conc, cooperativity)
-
+class Simulation():
+    def __init__(self, nucleosme_instance, protamines_instance,  num_nucleosomes, sequence, N=1000):
+        self.nucleosme = nucleosme_instance
+        self.protamines = protamines_instance
         self.N = N
-        # self.uniform_pos_arg_njit = nb.njit(self.uniform_pos_arg)
         self.t = 0
-        self.num_nucleosomes =  num_nucleosomes
+        self.num_nucleosomes = num_nucleosomes
         self.Seq = sequence
-        self.add_param = 0 ### KT this is per unit length
+        self.add_param = -0.5 
         self.nuc_fall_flag = False
+        # self.record_state = record_state
+        # self.uniform_pos_arg_njit = nb.njit(self.uniform_pos_arg)
 
-        # self.p_conc = p_conc
-        # self.k_unwrap = k_unwrap
-        # self.k_wrap = k_wrap
-        # self.binding_sites = binding_sites
-        # self.k_unbind = k_unbind
-        # self.k_bind = k_bind
-        # self.cooperativity = cooperativity
-        # print(self.nucleosomes)
-        # import sys
-        # sys.exit()
     def simulate_main(self):
+
+       
         times = []
         N_closed_array = []
         N_open_array = []
         P_free_array = []
         N_bound_array = []
+        Nucleosome_state = []
+
         ft_nucleosome_fell = 0
-        for n in range(1, self.N):
+
+        step_counter_1 = 0
+        step_counter_2 = 0
+
+        os.makedirs(NUCLEOSOME_STATE_RECORD_DIR, exist_ok=True)
+
+        for n in range(1, self.N+1):
             # Calculate total number of unbound sites in all nucleosomes
             # total_unbound_sites = func_cnt(system_vars.nucleosomes, ele=1)
             # print(n)
             # print(self.p_conc)
             # print(self.P_free)
 
-            all_rates = [self.calculate_rates(nucleo=nucleosome) for nucleosome in self.nucleosomes]
+            all_rates = [self.calculate_rates(nucleo=nucleosome) for nucleosome in self.nucleosme.nucleosomes]
             # print(self.nucleosomes)
             # print(all_rates)
             ### We select the first four values because the structure for a entry in all_rates contains a tuple.
@@ -598,62 +595,99 @@ class Simulation(nucleosme, protamines):
             # Select nucleosome and reaction to perform
             nucleosome_idx = np.random.choice(self.num_nucleosomes,
                                               p=[sum(rates[:4]) / total_rate for rates in all_rates])
+            
+            # print(np.divide(list(all_rates[nucleosome_idx][:4]),sum(all_rates[nucleosome_idx][:4])))
 
             reaction_idx = np.random.choice(len(all_rates[0][:4]), p=np.divide(list(all_rates[nucleosome_idx][:4]),
                                                                                sum(all_rates[nucleosome_idx][:4])))
             reaction_rates = all_rates[nucleosome_idx]
 
             # Perform reaction
-            updated_nucleosome = self.perform_reaction(nucleo = self.nucleosomes[nucleosome_idx],
+            updated_nucleosome = self.perform_reaction(nucleo = self.nucleosme.nucleosomes[nucleosome_idx],
                                                        react_id = reaction_idx,
                                                        rates=reaction_rates)
 
-            self.nucleosomes[nucleosome_idx] = updated_nucleosome
+            self.nucleosme.nucleosomes[nucleosome_idx] = updated_nucleosome
 
-            # print(self.nucleosomes[nucleosome_idx])
+            # print(self.nucleosme.nucleosomes[nucleosome_idx])
 
             # Update protamine concentration if necessary
 
             if reaction_idx == 0:
                 # Open site
-                self.N_closed -= 1
-                self.N_open += 1
+                self.nucleosme.N_closed -= 1
+                self.nucleosme.N_open += 1
             elif reaction_idx == 1:
                 # Close site
-                self.N_closed += 1
-                self.N_open -= 1
+                self.nucleosme.N_closed += 1
+                self.nucleosme.N_open -= 1
             elif reaction_idx == 2:
                 # Protamine binds
-                self.N_open -= 1
-                self.P_free -= 1
-                self.N_bound += 1
+                self.nucleosme.N_open -= 1
+                self.protamines.P_free -= 1
+                self.protamines.N_bound += 1
             else:
                 # Protamine unbinds
-                self.N_open += 1
-                self.P_free += 1
-                self.N_bound -= 1
+                self.nucleosme.N_open += 1
+                self.protamines.P_free += 1
+                self.protamines.N_bound -= 1
             # print('State of the simulation step ', self.P_free, self.N_bound, self.N_open)
             # print('Nucleosome:', self.nucleosomes[nucleosome_idx])
 
-            if len(np.where(self.nucleosomes[nucleosome_idx] == 0)[0])==0 and (self.nuc_fall_flag ==False):
+            if len(np.where(self.nucleosme.nucleosomes[nucleosome_idx] == 0)[0])==0 and (self.nuc_fall_flag ==False):
                 ft_nucleosome_fell = self.t
                 self.nuc_fall_flag =True
                 print('Step and Time at which nucleosome fell ', n, self.t)
             # Record state if necessary
+            # print(self.nucleosme.N_open)    
+            # print(self.nucleosme.nucleosomes)    
             times.append(self.t)
-            N_closed_array.append(self.N_closed)
-            N_open_array.append(self.N_open)
-            P_free_array.append(self.P_free)
-            N_bound_array.append(self.N_bound)
+            N_closed_array.append(self.nucleosme.N_closed)
+            N_open_array.append(self.nucleosme.N_open)
+            P_free_array.append(self.protamines.P_free)
+            N_bound_array.append(self.protamines.N_bound)
+            Nucleosome_state.append(np.concatenate(self.nucleosme.nucleosomes))
+            
+
+            if n%FILE_CHUNK_SIZE == 0:
+
+                self.batch_write_derivates(times, N_closed_array, N_open_array, P_free_array, N_bound_array, Nucleosome_state, step_counter_1)
+                print(f'{step_counter_1} records written.....')
+                step_counter_1 += 1
+                # Clear the arrays to free up memory
+                Nucleosome_state.clear()
+                times.clear()
+                N_closed_array.clear()
+                N_open_array.clear()
+                P_free_array.clear()
+                N_bound_array.clear()
+
 
             if self.nuc_fall_flag:
-                return ft_nucleosome_fell, times, N_closed_array, N_open_array, P_free_array, N_bound_array,self.nucleosomes
+                return ft_nucleosome_fell, times, N_closed_array, N_open_array, P_free_array, N_bound_array,self.nucleosme.nucleosomes
 
-        return ft_nucleosome_fell, times, N_closed_array, N_open_array, P_free_array, N_bound_array, self.nucleosomes
+        return ft_nucleosome_fell, times, N_closed_array, N_open_array, P_free_array, N_bound_array, self.nucleosme.nucleosomes
 
+    
+    
 
+    def batch_write_derivates(self, TM, N_Cl, N_Op, P_molec, N_B, NS, counter):
+        # Write Nucleosome_state array to .npy file
+        # print(NS)
+        # print(N_Op)
+        np.save(NUCLEOSOME_STATE_RECORD_DIR + f'Nucleosome_state_{counter}.npy', NS)
 
-
+        # Open the file in write mode
+        with open(NUCLEOSOME_STATE_RECORD_DIR + f"Deriavte_output_{counter}.csv", 'w', newline='') as file:
+            # Create a CSV writer object
+            writer = csv.writer(file)
+            writer.writerow(['Time', 'N_closed', 'N_open', 'P_free', 'N_bound'])
+            
+            # Write the arrays to the file
+            for row in zip(TM, N_Cl, N_Op, P_molec, N_B):
+                writer.writerow(row)
+        
+        return None
 
     def calculate_rates(self, nucleo):
         cl_site_indexes = np.ravel(np.where(nucleo == 0))
@@ -661,19 +695,23 @@ class Simulation(nucleosme, protamines):
         op_sites_indexes = np.ravel(np.where(nucleo == 1))
 
 
-        closed_sites_can_open_rate, rate_open = self.site_opening(cl_site_indexes)
+        closed_sites_can_open_rate, rate_open = self.nucleosme.site_opening(cl_site_indexes)
 
-        unbound_sites_can_close_rate, rate_close = self.site_closing(self.Seq, nucleo, cl_site_indexes, alpha=self.add_param)
+        # unbound_sites_can_close_rate, rate_close = self.nucleosme.site_closing(self.Seq, nucleo, cl_site_indexes, alpha=self.add_param)
 
-        unbound_sites_rate, rate_bind = self.unbound_site(op_sites_indexes)
-
-        bound_sites_rate, rate_unbind = self.bound_site(nucleo, pt_site_indexes)
+        unbound_sites_can_close_rate, rate_close = self.nucleosme.nucleosome_rewrapping(self.Seq, nucleo, cl_site_indexes)
 
 
-        print(nucleo)
+        unbound_sites_rate, rate_bind =  self.protamines.unbound_site(op_sites_indexes)
+
+        bound_sites_rate, rate_unbind =  self.protamines.bound_site(nucleo, pt_site_indexes)
+
+
+        # print(nucleo)
         print('Unwrapping rate', closed_sites_can_open_rate)
         print('Rewrapping rate', unbound_sites_can_close_rate)
-
+        # print('Binding rate', unbound_sites_rate)
+        # print('Unbinding rate', bound_sites_rate)
 
         return rate_open, rate_close, rate_bind, rate_unbind, \
                closed_sites_can_open_rate, unbound_sites_can_close_rate,\
@@ -733,206 +771,333 @@ class Simulation(nucleosme, protamines):
             raise ValueError('Invalid reaction index')
         return nucleo
 
+def simulation_fn(index):
+    Nucleosome_breath_instance = NucleosomeBreath()
+    nucleosme_instance = nucleosme(k_unwrap=K_UNWRAP, k_wrap=K_WRAP, num_nucleosomes=System_Nucleosomes, Nucleosome_breath_instance=Nucleosome_breath_instance, binding_sites=NUC_BIND)
+    protamines_instance = protamines(k_unbind=K_DES, k_bind=K_ADS, p_conc=P_CONC, cooperativity=COOPERATIVITY)
+    
+    simulation = Simulation(nucleosme_instance, protamines_instance, System_Nucleosomes, SEQUENCE, N=Simulation_steps)
+
+    print('Simulation instance created for index:', index)
+    return simulation 
+
+
+def parallel_execute_simulation():
+    with concurrent.futures.ProcessPoolExecutor(max_workers=6) as executor:
+        pool = []
+        for i in range(N_Independent_nucleosomes):
+            print(i)
+            pool.append(executor.submit(simulation_fn(i).simulate_main))
+
+        plot_cnt = 0
+        for j in concurrent.futures.as_completed(pool):
+            print('Simulation instance completed:', plot_cnt)
+            nuc_lifetime, times, N_closed_array, N_open_array, P_free_array, N_bound_array, nuc_state = j.result()
+            yield (nuc_lifetime, times, N_closed_array, N_open_array, P_free_array, N_bound_array, nuc_state)
+            plot_cnt += 1
+
+import psutil
+import threading
+def monitor_process_count():
+    current_process = psutil.Process()
+    while True:
+        children = current_process.children()
+        print(f"Number of child processes: {len(children)}")
+        time.sleep(1)  # Check every second
 
 if __name__== '__main__':
 
     start = time.perf_counter()
 
-    times_ALL = []
-    N_closes_array_ALL = []
-    N_open_array_ALL = []
-    P_free_array_ALL = []
-    N_bound_array_ALL = []
+    # Start monitoring in a separate thread
+    #monitor_thread = threading.Thread(target=monitor_process_count, daemon=True)
+    #monitor_thread.start()
 
+
+
+    # Nucleosome_breath_instance = NucleosomeBreath()
+    # nucleosme_instance = nucleosme(k_unwrap=K_UNWRAP, k_wrap=K_WRAP, num_nucleosomes=System_Nucleosomes, Nucleosome_breath_instance=Nucleosome_breath_instance, binding_sites=NUC_BIND)
+
+    # print(nucleosme_instance.Free_DNA(SEQUENCE, 0, 139))
+
+    # print(SEQUENCE[0:14])
+    # import sys
+    # sys.exit()
     Sim_data = pd.DataFrame(columns=['C', 'bound_prot', 'nuc_open', 'nuc_closed'])
     shape_list = dict()
-    temp_bound = []
-    temp_open = []
-    temp_closed = []
+    Last_bound = []
+    Last_open = []
+    Last_closed = []
     end_time = []
     con = []
-    temp_nuc_lifetime = []
+    END_nuc_lifetime = []
 
-    count_open_site= [0]*15
-
-    #
-    sum_nuc_state = [0] * 14  # Assuming the length of your arrays is 14
-
-    with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
-        pool = []
-        for i in range(N_Independent_nucleosomes):
-            print(i)
-            pool.append(executor.submit(Simulation(k_unwrap=K_UNWRAP, k_wrap=K_WRAP, k_unbind=K_DES,  k_bind=K_ADS,
-                                                   p_conc=P_CONC,  cooperativity=COOPERATIVITY,
-                                                   num_nucleosomes=System_Nucleosomes,
-                                                   N=Simulation_steps, sequence=SEQUENCE).simulate_main))
-
-        plot_cnt=0
-        for j in concurrent.futures.as_completed(pool):
-            nuc_lifetime, times, N_closed_array, N_open_array, P_free_array, N_bound_array, nuc_state = j.result()
+    
 
 
-
-            # Plotting the figure for evolution of number of open sites and the bound protamine for each of the independent nucleosome.
-
-            times_sampled = times[::10]
-            N_closed_sampled = N_closed_array[::10]
-            N_open_sampled = N_open_array[::10]
-            P_free_sampled = P_free_array[::10]
-            N_bound_sampled = N_bound_array[::10]
-
-            N_open_sample_total = list(map(add, N_open_sampled, N_bound_sampled))
-            N_open_total = list(map(add, N_open_array, N_bound_array))
-
-            # print(nuc_state)
-
-
-            sum_nuc_state = [sum(x) for x in zip(sum_nuc_state, nuc_state[0])]
-
-            index = np.count_nonzero(nuc_state[0] == 1)
-
-            count_open_site[index] = count_open_site[index] + 1
-
-            
-            # plt.figure(figsize=(6, 6))
-            
-            # # plt.plot(times_sampled, N_closed_sampled, label='N Closed', color='blue')
-            # plt.plot(times_sampled, N_open_sample_total, label='N Open', color='green')
-            # # plt.plot(times_sampled, P_free_sampled, label='P Free', color='red')
-            # plt.plot(times_sampled, N_bound_sampled, label='N Bound', color='purple')
-            # plt.axvline(x=nuc_lifetime, color='black')
-            
-            # plt.xlabel('Time')
-            # plt.ylabel('Values')
-            # plt.title('Line Charts for Nucleosome States')
-            # plt.legend()
-            
-            # plt.savefig(str(plot_cnt)+'.png')
-            # plot_cnt = plot_cnt+1
-
-
-            ##Keeping only the last entry of the simulation
-            end_time.append(times[-1])
-            temp_open.append(N_open_array[-1])
-            temp_bound.append(N_bound_array[-1])
-            temp_closed.append(N_closed_array[-1])
-            temp_nuc_lifetime.append(nuc_lifetime) ### Store the time when nucleosome fell.
-
+    def plot_nucleosome_evolution(tl, opn, bound, closed, free_prot, ct, nuc_lft=0, period=10):
+        N_open_sample_total = list(map(add, opn[::period], bound[::period]))
+        # print(N_open_sample_total)
+        plt.figure(figsize=(20, 9))
+        # print(tl)    
+        # plt.plot(times_sampled, N_closed_sampled, label='N Closed', color='blue')
+        plt.plot(tl[::period], N_open_sample_total, label='N Open', color='green')
+        # plt.plot(times_sampled, P_free_sampled, label='P Free', color='red')
+        plt.plot(tl[::period], N_bound_array[::period], label='N Bound', color='purple')
+        # plt.axvline(x=nuc_lifetime, color='black')
         
+        plt.xlabel('Time')
+        plt.ylabel('Values')
+        plt.title('Line Charts for Nucleosome States')
+        plt.legend()
+        # Create a directory based on the date of the run
+        os.makedirs(SIMULATION_PLOTS_DIR, exist_ok=True)
+        
+        plt.savefig(SIMULATION_PLOTS_DIR + str(ct) + '.png')
+        plt.close()
+
+        # plt.show()
+
+
+    def acces_prob_plot():
+        count_open_site= [0]*15
+
+        sum_nuc_state = [0]*14  # Assuming the length of your arrays is 14
+
+        os.makedirs(BREATHING_DIR, exist_ok=True)
+
+        with open(State_record_file, 'r') as file:
+            for line in file:
+                nuc_state = np.array([int(x) for x in line.strip().replace('[','').replace(']','').split(',')])
+                sum_nuc_state = [sum(x) for x in zip(sum_nuc_state, nuc_state)]
+                index = np.count_nonzero(nuc_state == 1)
+                count_open_site[index] = count_open_site[index] + 1
 
 
         acces_Pk = np.divide(sum_nuc_state, N_Independent_nucleosomes)
-        print(sum_nuc_state)
-        print(acces_Pk)
 
         plt.figure(figsize=(6, 6))
         plt.plot(acces_Pk)
         plt.grid()
-        plt.show()
+        # plt.show()
+        plt.savefig(BREATHING_DIR +'Bind_site_access_Prob.png')
+        plt.close()
 
         print(count_open_site)
         plt.figure(figsize=(6, 6))
         plt.plot(count_open_site)
         plt.grid()
-        plt.show()
-        # plt.savefig(RESULT_DIR+'Figures/Bind_site_access_Prob.png')
+        # plt.show()
+        plt.savefig(BREATHING_DIR+'Open_site_fraction.png')
+        plt.close()
+
+    
 
 
-        bound_mean = mean(temp_bound)
-        open_mean = mean(temp_open)
-        closed_mean = mean(temp_closed)
-        time_mean = mean(end_time)
-        nuc_lifetime_mean = mean(temp_nuc_lifetime)
+    def read_csv_files(directory):
+        data = pd.DataFrame(columns=['Time', 'N_closed', 'N_open', 'P_free', 'N_bound'])  # Create an empty DataFrame to store the data
+        
+        # Iterate over each file in the directory
+        for filename in os.listdir(directory):
+            if filename.endswith('.csv'):  # Check if the file is a .csv file
+                filepath = os.path.join(directory, filename)  # Construct the full file path
+                
+                # Read the .csv file and append the data to the DataFrame
+                df = pd.read_csv(filepath)
+                data = pd.concat([data, df],  axis=0, ignore_index=True)  # Append the data to the DataFrame
+        
+        return data
 
 
-        # with open(RESULT_DIR+'temp/'+str(Param_ind)+'_'+str(SEQ_id)+'.txt', 'w') as out_file:
-        #     ID = ['Paramid:'+str(Param_ind),
-        #           'Seqid:'+str(SEQ_id),
-        #           'P_conc:'+str(P_CONC),
-        #           'Cooperativity:'+str(COOPERATIVITY),
-        #           'Open:'+str(open_mean),
-        #           'Closed:' + str(closed_mean),
-        #           'Bound:' + str(bound_mean),
-        #           'Time:' + str(time_mean),
-        #           'Nuc_LT:' + str(nuc_lifetime_mean)
-        #           ]
+    def get_indices_of_ones(data):
+        matrix = np.zeros((15, 15))
+        
+        for row in data:
+            row_indices = np.ravel(np.where(row == 0))
+            # print(row)
+            if len(row_indices) > 0:
+                L = row_indices[0]
+                R = 13-row_indices[-1]
 
-        #     out_file.write('>'+ '|'.join(ID)+'\n'+SEQUENCE+'\n')
+                matrix[L, R] += 1
+            else:
+                print('Fallen Nucleosome')
+                ## need to addd the for the other case
 
-            # temp_bound.append(bound_value)
-            #
-            # temp_open.append(open_value)
-            # temp_closed.append(closed_value)
-            # end_time.append(time_value)
-            # con.append(con_value)
+        return matrix
+    # Define the file path
+
+    os.makedirs(STATE_RECORD_DIR, exist_ok=True)
+    State_record_file = STATE_RECORD_DIR + 'State_record_nuc.txt' ###Recording the final state of the nucleosome for each independent run/nucleosome 
+
+    if SINGLE_NUCLEOSOME_EVOLUTION:
+        simulation_OBJ = simulation_fn(0)
+        nuc_lifetime, times, N_closed_array, N_open_array, P_free_array, N_bound_array, nuc_state = simulation_OBJ.simulate_main()
+        
+        
+                
+        files = os.listdir(NUCLEOSOME_STATE_RECORD_DIR)
+        # print(NUCLEOSOME_STATE_RECORD_DIR)
+        # print(files)
+        os.makedirs(BREATHING_DIR, exist_ok=True)
+        state_sum = np.zeros((1, 14))
+        state_matrix = np.zeros((15, 15))
+        # Loop over each file
+        for filename in files:
+            # Check if the file is a .npy file
+            if filename.endswith('.npy'):
+                # Construct the full file path
+                filepath = os.path.join(NUCLEOSOME_STATE_RECORD_DIR, filename)
+                
+                # Load the .npy file
+                data = np.load(filepath)
+
+                m = get_indices_of_ones(data)
+                state_matrix = np.add(state_matrix, m)
+
+                summed_data = np.sum(data, axis=0)
+                state_sum = np.add(state_sum, summed_data)
+
+
+
+
+        
+        prob_site_access = np.divide(state_sum, Simulation_steps)
+        state_matrix_prob = np.divide(state_matrix, Simulation_steps)
+
+
+        # print(prob_site_access)
+        # print(state_matrix_prob)
+        for i in range(prob_site_access.shape[0]):      
+            plt.figure(figsize=(6, 6))
+            plt.plot(prob_site_access[i])
+            plt.grid()
+            plt.savefig(BREATHING_DIR + f'Bind_site_access_Prob_{i}.png')
+            plt.close()
+            
+        plt.figure(figsize=(10, 8))
+        plt.imshow(state_matrix_prob, cmap='magma_r', interpolation='nearest')
+        plt.colorbar()
+        plt.xlabel('Current State')
+        plt.ylabel('Next State')
+        plt.title('State Transition Probability Matrix')
+        plt.savefig(BREATHING_DIR + 'state_matrix_heatmap.png')
+        plt.close()
+
+
+        DF = read_csv_files(directory=NUCLEOSOME_STATE_RECORD_DIR)
+        DF['N_open_total'] = DF['N_open'] + DF['N_bound']
+        # print(DF)
+
+
+        plt.figure(figsize=(10, 6))
+        plt.plot(DF['Time'], DF['N_open_total'])
+        plt.xlabel('Time')
+        plt.ylabel('N_open')
+        plt.title('Trajectory of N_open with Time')
+        plt.grid(True)
+        plt.savefig(BREATHING_DIR + 'N_open_trajectory.png')
+        plt.close()
+
+        # Plot the histogram of N_open
+        plt.figure(figsize=(10, 6))
+        plt.hist(DF['N_open_total'], bins=20, edgecolor='black')
+        plt.xlabel('N_open_total')
+        plt.ylabel('Frequency')
+        plt.title('Histogram of N_open Distribution')
+        plt.grid(True)
+        plt.savefig(BREATHING_DIR + 'N_open_histogram.png')
+        plt.close()
+        
+        
+        # plot_nucleosome_evolution(tl=times,
+        #                             opn=N_open_array,
+        #                             bound=N_bound_array, 
+        #                             closed=N_closed_array, 
+        #                             free_prot=P_free_array, 
+        #                             ct = 0,
+        #                             nuc_lft=0, 
+        #                             period=10)
+
+
+    else:
+
+        if os.path.exists(State_record_file):
+            os.remove(State_record_file)
+
+        with open(State_record_file, 'w') as file:
+            counter = 0
+
+            for result in parallel_execute_simulation():
+                nuc_lifetime, times, N_closed_array, N_open_array, P_free_array, N_bound_array, nuc_state = result
+                # print(nuc_state)
+                # file.write(nuc_state[0] + '\n')
+                # file.write(str(nuc_state[0])+ '\n')
+                file.write(np.array2string(nuc_state[0], separator=',') + '\n')
+                counter += 1
+                if counter % 100 == 0:
+                    # Flush the file buffer to ensure data is written immediately
+                    file.flush()
+
+
+                ##Keeping only the last entry of the simulation
+                ### I can also get this from the State_record_file because it also contains the last state of the nucleosome
+                end_time.append(times[-1])
+                Last_open.append(N_open_array[-1])
+                Last_bound.append(N_bound_array[-1])
+                Last_closed.append(N_closed_array[-1])
+                END_nuc_lifetime.append(nuc_lifetime) ### Store the time when nucleosome fell.
+
+                if PLOT_NUC_STATE:
+                    plot_nucleosome_evolution(tl=times,
+                                            opn=N_open_array,
+                                            bound=N_bound_array, 
+                                            closed=N_closed_array, 
+                                            free_prot=P_free_array, 
+                                            ct = counter,
+                                            nuc_lft=0, 
+                                            period=10)
+
+        # Close the file
+        file.close()
+
+
+        if BREATHING_ONLY:
+            acces_prob_plot()
+    
+       
+
+
+    # bound_mean = mean(temp_bound)
+    # open_mean = mean(temp_open)
+    # closed_mean = mean(temp_closed)
+    # time_mean = mean(end_time)
+    # nuc_lifetime_mean = mean(temp_nuc_lifetime)
+
+
+    # with open(RESULT_DIR+'temp/'+str(Param_ind)+'_'+str(SEQ_id)+'.txt', 'w') as out_file:
+    #     ID = ['Paramid:'+str(Param_ind),
+    #           'Seqid:'+str(SEQ_id),
+    #           'P_conc:'+str(P_CONC),
+    #           'Cooperativity:'+str(COOPERATIVITY),
+    #           'Open:'+str(open_mean),
+    #           'Closed:' + str(closed_mean),
+    #           'Bound:' + str(bound_mean),
+    #           'Time:' + str(time_mean),
+    #           'Nuc_LT:' + str(nuc_lifetime_mean)
+    #           ]
+
+    #     out_file.write('>'+ '|'.join(ID)+'\n'+SEQUENCE+'\n')
+
+        # temp_bound.append(bound_value)
+        #
+        # temp_open.append(open_value)
+        # temp_closed.append(closed_value)
+        # end_time.append(time_value)
+        # con.append(con_value)
 
 
     end = time.perf_counter()
     print(f'Finished in {round(end - start, 2)} second(s)')
     print(f'Parameter Protamine:{P_CONC} and Cooperativity:{COOPERATIVITY} with Sequence_id:{SEQ_id} is done>>>>>>>>>>>>>>>>>>>>')
-    # for cycles in range(N_nucleosomes):
-    #     print(cycles)
-    #     s1 = Simulation(k_unwrap=4, k_wrap=21, k_unbind=23,  k_bind=2, p_conc=0.0,  cooperativity=1, num_nucleosomes=1, N=10000, sequence=SEQUENCE)
-    #     times, N_closed_array, N_open_array, P_free_array, N_bound_array = s1.simulate_main()
-    #     # times_ALL.append(times)
-    #     # N_closes_array_ALL.append(N_closed_array)
-    #     # N_open_array_ALL.append(N_open_array)
-    #     # P_free_array_ALL.append(P_free_array)
-    #     # N_bound_array_ALL.append(N_bound_array)
-    #     #
-    #     # times_ALL = np.array(times_ALL)
-    #     # N_closes_array_ALL = np.array(N_closes_array_ALL)
-    #     # N_bound_array_ALL = np.array(N_bound_array_ALL)
-    #     # N_open_array_ALL = np.array(N_open_array_ALL)
-    #
-    #     ##captures the last event of the nucleosome
-    #     # temp_bound.append(N_bound_array[-1])
-    #     # temp_open.append(N_open_array[-1])
-    #     # temp_closed.append(N_closed_array[-1])
-    #     # end_time.append(times[-1])
-    #
-    #     ##capture full journey of each nucleosome
-    #     temp_bound.append(N_bound_array)
-    #     temp_open.append(N_open_array)
-    #     temp_closed.append(N_closed_array)
-    #     end_time.append(times)
 
-    # print(temp_open)
-    # print(temp_bound)
-
-#     for i in range(10):
-#         plt.figure(figsize=(8, 6))
-#         plt.scatter(end_time[i], temp_open[i], label=f"Nucleosome {i + 1}")
-#         plt.title(f"Nucleosome {i + 1}")
-#         plt.xlabel('Time Step')
-#         plt.ylabel('Open Sites')
-#         plt.legend()
-#         plt.show()
-#
-#
-#
-#
-#     # Plot the mean across all nucleosomes
-#     mean_open_sites = np.mean(temp_open, axis=0)
-#     mean_time_steps = np.mean(end_time, axis=0)
-#
-#     plt.figure(figsize=(8, 6))
-#     plt.plot(mean_time_steps, mean_open_sites, label="Mean Across Nucleosomes", color="red")
-#     plt.title("Mean Across Nucleosomes")
-#     plt.xlabel('Time Step')
-#     plt.ylabel('Open Sites')
-#     plt.legend()
-#     plt.show()
-#
-#     # bound_mean = mean(N_bound_array)
-#     # open_mean = mean(N_open_array)
-#     # closed_mean = mean(N_closed_array)
-#     # time_mean = mean(end_time)
-#     # print(N_bound_array_ALL)
-#
-#
-# # print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
-# # print(tf.config.list_physical_devices('GPU'))
-#
-#
-# import time_series_generator
