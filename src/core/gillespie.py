@@ -4,238 +4,230 @@ import math
 import csv
 
 from dataclasses import dataclass
-from typing import List
-import os
-import sys
-import datetime
-import argparse
+from typing import List, Iterator, Tuple, Dict
+from src.config.custom_type import SimulationState, Rates, ReactionChoice, ReactionType, REACTION_TARGET_STATE
+
+from src.core.nucleosome import nucleosome
+from src.core.protamine import protamines
+from src.cyt_script.tricodec import int_to_tri14, tri14_to_int
+from src.cyt_script.edit_tricodec import edit_tricodec
+from src.utils.logger_util import get_logger
 
 
 
-@dataclass
-class SimulationState:
-    time: float
-    closed_sites: int
-    bound_protamines: int
-    nucleosome_states: List[np.ndarray]
+logger = get_logger(__name__, log_file=None, level='INFO')
 
+logger.info('Starting Gillespie simulation')
 
 class GillespieSimulator():
-    def __init__(self, nucleosme_instance, protamines_instance,  num_nucleosomes, N=1000, ONE_NUCLEOSOME_BREATHING=False):
-        self.nucleosme = nucleosme_instance
-        self.protamines = protamines_instance
-        self.N = N # Number of steps
+    def __init__(self, nuc_inst: nucleosome, prot_inst: protamines,  num_nucleosomes: int, STEPS:int=1000):
+        self.nuc = nuc_inst
+        self.prot = prot_inst
+        self.STEPS = STEPS # Number of steps
         self.t = 0
-        self.num_nucleosomes = num_nucleosomes
+        self.num_nuc = num_nucleosomes
         self.nuc_fall_flag = False
-        self.only_one_nucleosome_breathing = ONE_NUCLEOSOME_BREATHING
         # self.uniform_pos_arg_njit = nb.njit(self.uniform_pos_arg)
 
 
+    def calculate_rates(self, one_nuc_state: np.int32) -> Rates:
+        nucleo_str = int_to_tri14(int(one_nuc_state))
 
-    def batch_write_derivates(self, TM, N_Cl, N_Op, P_molec, N_B, NS, counter):
-        # Write Nucleosome_state array to .npy file
-        # print(NS)
-        # print(N_Op)
-        np.save(NUCLEOSOME_STATE_RECORD_DIR + f'Nucleosome_state_{counter}.npy', NS)
+        nucleo = np.frombuffer(nucleo_str.encode('ascii'),
+                               dtype=np.uint8) - ord('0')
+        # logger.info(f"Converted nucleosome state to numpy array: {nucleo}")
 
-        # Open the file in write mode
-        with open(NUCLEOSOME_STATE_RECORD_DIR + f"Deriavte_output_{counter}.csv", 'w', newline='') as file:
-            # Create a CSV writer object
-            writer = csv.writer(file)
-            writer.writerow(['Time', 'N_closed', 'N_open', 'P_free', 'N_bound'])
-            
-            # Write the arrays to the file
-            for row in zip(TM, N_Cl, N_Op, P_molec, N_B):
-                writer.writerow(row)
-        
-        return None
+        assert nucleo.ndim == 1, f"nucleo must be a 1D numpy array, got {nucleo.ndim}D, process one nucleosome at a time."
 
-    def calculate_rates(self, nucleo):
-        histone_occupied_indexes = np.ravel(np.where(nucleo == 0))
-        protein_bound_indexes = np.ravel(np.where(nucleo == 2))
-        open_indexes = np.ravel(np.where(nucleo == 1))
+        total_rates = {k: 0 for k in ReactionType}
+        persite_rates = {k: {} for k in ReactionType}
 
+        histone_occupied_indx = np.ravel(np.where(nucleo == 0))
+        if len(histone_occupied_indx) == 0:
+            total_rates[ReactionType.UNWRAPPING] = 0
+            persite_rates[ReactionType.UNWRAPPING] = {}
 
-        unwrapping_sites_rate, rate_open = self.nucleosme.unwrapping(histone_occupied_indexes)
+            total_rates[ReactionType.REWRAPPING] = 0
+            persite_rates[ReactionType.REWRAPPING] = {}
 
-        rewrapping_sites_rate, rate_close = self.nucleosme.rewrapping(nucleo, histone_occupied_indexes, keep_histone=self.only_one_nucleosome_breathing)
-
-
-        bound_sites_rate, rate_bind =  self.protamines.protein_binding(open_indexes)
-
-        # unbound_sites_rate, rate_unbind =  self.protamines.protein_unbinding(protein_bound_indexes)
-        unbound_sites_rate, rate_unbind =  self.protamines.protein_unbinding_coop(nucleo, protein_bound_indexes)
-
-        # print(nucleo)
-        # print('Unwrapping rate', unwrapping_sites_rate)
-        # print('Rewrapping rate', rewrapping_sites_rate)
-        # print('Binding rate', bound_sites_rate)
-        # print('Unbinding rate', unbound_sites_rate)
-
-        return rate_open, rate_close, rate_bind, rate_unbind, \
-               unwrapping_sites_rate, rewrapping_sites_rate,\
-               bound_sites_rate, unbound_sites_rate
-
-    def uniform_pos_arg(self):
-        return np.random.uniform(0.0, 1.0)
-
-    def perform_reaction(self, nucleo, react_id, rates):
-        # nucleosome is a list of sites, with some value (say, 0 for closed, 1 for open/unbound, 2 for open/bound)
-
-        rates_value = list(rates[react_id + 4].values())
-        rates_keys = list(rates[react_id + 4].keys())
-
-        if react_id == 0:  # Opening reaction
-            # Choose a closed site to open
-            #         closed_sites = np.where(nucleosome == 0)
-
-            site_to_open_ind = np.random.choice(len(rates_value),
-                                                p=np.divide(rates_value,
-                                                            sum(rates_value)))
-
-            #         site_to_open = closed_sites[0][0]
-            nucleo[rates_keys[site_to_open_ind]] = 1
-
-        elif react_id == 1:  # Closing reaction
-            # Choose an open/unbound site to close
-            #         closed_sites = np.where(nucleosome == 0)
-
-            site_to_close_ind = np.random.choice(len(rates_value),
-                                                 p=np.divide(rates_value,
-                                                             sum(rates_value)))
-
-            #         site_to_close = (closed_sites[0][0])-1
-            nucleo[rates_keys[site_to_close_ind]] = 0
-
-        elif react_id == 2:  # Binding reaction
-            # Choose an open/unbound site for protamine to bind
-            #         unbound_sites = np.where(nucleosome == 1)
-
-            site_to_bind_ind = np.random.choice(len(rates_value),
-                                                p=np.divide(rates_value,
-                                                            sum(rates_value)))
-
-            #         site_to_bind = np.random.choice(unbound_sites[0])
-            nucleo[rates_keys[site_to_bind_ind]] = 2
-
-        elif react_id == 3:  # Unbinding reaction
-            # Choose an open/bound site for protamine to unbind
-            #         bound_sites = np.where(nucleosome == 2)
-            site_to_unbind_ind = np.random.choice(len(rates_value),
-                                                  p=np.divide(rates_value,
-                                                              sum(rates_value)))
-            nucleo[rates_keys[site_to_unbind_ind]] = 1
 
         else:
-            raise ValueError('Invalid reaction index')
-        return nucleo
+            unwrapping_sites_rate = self.nuc.unwrapping(histone_occupied_indx)
+            total_rates[ReactionType.UNWRAPPING] = sum(unwrapping_sites_rate.values())
+            persite_rates[ReactionType.UNWRAPPING] = unwrapping_sites_rate
 
 
+            rewrapping_sites_rate = self.nuc.rewrapping(nucleo, histone_occupied_indx)
+            total_rates[ReactionType.REWRAPPING] = sum(rewrapping_sites_rate.values())
+            persite_rates[ReactionType.REWRAPPING] = rewrapping_sites_rate
 
-    def simulate_main(self):
 
+        protein_bound_indexes = np.ravel(np.where(nucleo == 2))
+        if len(protein_bound_indexes) == 0:
+            total_rates[ReactionType.UNBINDING] = 0
+            persite_rates[ReactionType.UNBINDING] = {}
+        else:
+            unbound_sites_rate = self.prot.protein_unbinding_coop(nucleo, protein_bound_indexes)
+            total_rates[ReactionType.UNBINDING] = sum(unbound_sites_rate.values())
+            persite_rates[ReactionType.UNBINDING] = unbound_sites_rate
         
-        times = []
-        N_closed_array = []
-        N_open_array = []
-        P_free_array = []
-        N_bound_array = []
-        Nucleosome_state = []
-        nucleosome_fall_time = []
-        ft_nucleosome_fell = np.nan
+        open_indexes = np.ravel(np.where(nucleo == 1))
+        if len(open_indexes) == 0:
+            total_rates[ReactionType.BINDING] = 0
+            persite_rates[ReactionType.BINDING] = {}
+        else:
+            bound_sites_rate = self.prot.protein_binding(open_indexes)
+            total_rates[ReactionType.BINDING] = sum(bound_sites_rate.values())
+            persite_rates[ReactionType.BINDING] = bound_sites_rate
 
-        for n in range(1, self.N+1):
-            # Calculate total number of unbound sites in all nucleosomes
-            # total_unbound_sites = func_cnt(system_vars.nucleosomes, ele=1)
-            # print(n)
-            # print(self.p_conc)
-            # print(self.P_free)
+        return Rates(persite_rates, total_rates)
 
-            all_rates = [self.calculate_rates(nucleo=nucleosome) for nucleosome in self.nucleosme.nucleosomes]
-            # print(self.nucleosomes)
-            # print(all_rates)
-            ### We select the first four values because the structure for a entry in all_rates contains a tuple.
-            # The first four are the rates sum of all the rates for binding, unbinding, unwrap, wrap and the remaining four are the dictionary for their corresponding rates
-            #Example: (8, 21, 720000000.0, 0, {0: 4, 12: 4}, {13: 21}, {13: 720000000.0}, {})
-            total_rate = sum([sum(rates[:4]) for rates in all_rates])
+    def _choose_reaction(self, all_rates:List[Rates]) -> ReactionChoice:
+        """Given list of (total_rate, per_site_dict), pick which nuc and which reaction."""
+        # 1) pick nucleosome index by relative total_rate
+        # 2) pick reaction within that nucleosome
+         # Select nucleosome and reaction to perform
+        nuc_weights = np.array([sum(r.total.values()) for r in all_rates], dtype=float)
+        totalN = nuc_weights.sum()
+        if totalN <= 0:
+            raise RuntimeError("No reactions available (total rate = 0)")
+        p_nuc = nuc_weights / totalN
+        nuc_idx = np.random.choice(self.num_nuc, p=p_nuc)
 
-            # Calculate time to next reaction
-            u_ = self.uniform_pos_arg()
-            dt = np.log(1 / u_) / total_rate
-            # print(dt)
-            self.t += dt
+        rt_list    = list(ReactionType)
+        rates_dict = all_rates[nuc_idx].total
 
-            # Select nucleosome and reaction to perform
-            nucleosome_idx = np.random.choice(self.num_nucleosomes,
-                                                p=[sum(rates[:4]) / total_rate for rates in all_rates])
-            
-            # print(np.divide(list(all_rates[nucleosome_idx][:4]),sum(all_rates[nucleosome_idx][:4])))
+        type_rates = np.array([rates_dict[rt] for rt in rt_list], dtype=float)
+        sub_total  = type_rates.sum()
+        if sub_total <= 0:
+            raise RuntimeError(f"No reactions for nucleosome {nuc_idx}")
+        
+        type_probs = type_rates / sub_total
+        choice_idx = np.random.choice(len(rt_list), p=type_probs)
+        chosen_rt  = rt_list[choice_idx]
 
-            reaction_idx = np.random.choice(len(all_rates[0][:4]), p=np.divide(list(all_rates[nucleosome_idx][:4]),
-                                                                                sum(all_rates[nucleosome_idx][:4])))
-            reaction_rates = all_rates[nucleosome_idx]
+        return ReactionChoice(nuc_idx=nuc_idx, 
+                              reaction=chosen_rt)
+
+    def _uniform_pos_arg(self):
+        return np.random.uniform(0.0, 1.0)
+
+    def perform_reaction(self, choice: ReactionChoice, 
+                         persite:Dict[ReactionType, Dict[int, float]])->None:
+        # nucleosome is a list of sites, with some value (say, 0 for closed, 1 for open/unbound, 2 for open/bound)
+        nuc_idx = choice.nuc_idx
+        react_id = choice.reaction  # Get the index of the reaction type
+
+        rates_dict = persite[react_id]
+        if not rates_dict:
+            return
+        
+        sites, weights = zip(*rates_dict.items())
+        w = np.array(weights, dtype=float)
+        w /= w.sum()
+
+        chosen_site = np.random.choice(sites, p=w)
+
+        new_digit = REACTION_TARGET_STATE[react_id].value
+
+        new_state = edit_tricodec(value=self.nuc.nuc_state[nuc_idx], 
+                                  position=chosen_site, 
+                                  new_digit=new_digit)
+        
+        self.nuc.nuc_state[nuc_idx] = new_state
+        return
+
+
+    def _update_species_count(self, reaction:ReactionChoice):
+        if reaction.reaction == 0:
+            # Open site
+            self.nuc.N_closed -= 1
+        elif reaction.reaction == 1:
+            # Close site
+            self.nuc.N_closed += 1
+        elif reaction.reaction == 2:
+            # Protamine binds
+            self.prot.P_free -= 1
+            self.prot.N_bound += 1
+        else:
+            # Protamine unbinds
+            self.prot.P_free += 1
+            self.prot.N_bound -= 1
+
+
+    def run(self) -> Iterator[SimulationState]:
+
+        """Run the Gillespie simulation for N steps."""
+
+
+        for n in range(self.STEPS):
+
+            # logger.info(f'Simulation step {n+1}/{self.STEPS} >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n')
+
+            rates:List[Rates] = [self.calculate_rates(one_nuc_state=nc) for nc in self.nuc.nuc_state]
+            total_rate = sum(sum(r.total.values()) for r in rates)
+
+            # logger.info(f'Rates at step {n}: {rates}')
+            # logger.info(f'Total rate at step {n}: {total_rate}')
+
+            if total_rate <= 0:
+                logger.info(f'No reactions possible, exiting simulation : total_rate = {total_rate}')
+                return None
+            reaction_choice = self._choose_reaction(rates)
+            react_rates = rates[reaction_choice.nuc_idx].persite
 
             # Perform reaction
-            updated_nucleosome = self.perform_reaction(nucleo = self.nucleosme.nucleosomes[nucleosome_idx],
-                                                        react_id = reaction_idx,
-                                                        rates=reaction_rates)
+            self.perform_reaction(reaction_choice,
+                                    persite=react_rates)
 
-            self.nucleosme.nucleosomes[nucleosome_idx] = updated_nucleosome
 
-            # print(self.nucleosme.nucleosomes[nucleosome_idx])
+            # advance reaction time
+            u_ = self._uniform_pos_arg()
+            dt = np.log(1 / u_) / total_rate
+            self.t += dt
 
-            # Update protamine concentration if necessary
+            # Update the species count
+            self._update_species_count(reaction_choice)
 
-            if reaction_idx == 0:
-                # Open site
-                self.nucleosme.N_closed -= 1
-                self.nucleosme.N_open += 1
-            elif reaction_idx == 1:
-                # Close site
-                self.nucleosme.N_closed += 1
-                self.nucleosme.N_open -= 1
-            elif reaction_idx == 2:
-                # Protamine binds
-                self.nucleosme.N_open -= 1
-                # self.protamines.P_free -= 1
-                self.protamines.N_bound += 1
-            else:
-                # Protamine unbinds
-                self.nucleosme.N_open += 1
-                # self.protamines.P_free += 1
-                self.protamines.N_bound -= 1
-            # print('State of the simulation step ', self.P_free, self.N_bound, self.N_open)
-            # print('Nucleosome:', self.nucleosomes[nucleosome_idx])
-            
-            if len(np.where(self.nucleosme.nucleosomes[nucleosome_idx] == 0)[0])==0 and (self.nucleosme.record_state[nucleosome_idx] == 1):
-                ft_nucleosome_fell = self.t
-                self.nucleosme.record_state[nucleosome_idx]=0
-                nucleosome_fall_time.append(self.t)
+            yield SimulationState(  time            =self.t,
+                                    cs              =self.nuc.N_closed,
+                                    bprot           =self.prot.N_bound,
+                                    nucs_snapshot   =self.nuc.nuc_state)
 
-                print('Step and Time at which nucleosome fell ', n, self.t)
 
-                if np.count_nonzero(self.nucleosme.record_state == 1) == 0:
-                    print(self.nucleosme.record_state)
-                    # print('All nucleosomes have fallen')
-                    self.nuc_fall_flag = True
 
-                # if self.only_one_nucleosome_breathing:
-                #     self.nuc_fall_flag = True
-            # print('The nucleosome state ', np.where(self.nucleosme.nucleosomes[nucleosome_idx] == 0)[0])
-            # print(self.nucleosme.nucleosomes[nucleosome_idx])
 
-            times.append(self.t)
-            N_closed_array.append(self.nucleosme.N_closed)
-            # N_open_array.append(self.nucleosme.N_open)
-            # P_free_array.append(self.protamines.P_free)
-            N_bound_array.append(self.protamines.N_bound)
-            Nucleosome_state.append(np.concatenate(self.nucleosme.nucleosomes))
-            
 
-            if self.nuc_fall_flag and not self.only_one_nucleosome_breathing:
-                print('All nucleosomes have fallen')
-                return nucleosome_fall_time, N_closed_array, N_bound_array, times, self.nucleosme.nucleosomes
-        # return nucleosome_fall_time, N_closed_array, N_bound_array, times, self.nucleosme.nucleosomes
-        return SimulationState(time=self.t, closed_sites=self.nucleosme.N_closed, bound_protamines=self.protamines.N_bound, nucleosome_states=self.nucleosme.nucleosomes)
+if __name__ == "__main__":
 
+
+
+    # logger.info(f"int_to_tri14(45627): {int_to_tri14(45627)}")
+    # logger.info(f"tri14_to_int('11110000000000'): {tri14_to_int('11110000000000')}")
+
+    # new_value = edit_tricodec(value=45627, position=3, new_digit=2)
+    # logger.info(f"edit_tricodec(45627, 3, 2): {new_value}")
+    # logger.info(f"int_to_tri14(edit_tricodec(45627, 3, 2)): {int_to_tri14(new_value)}")
+
+    # import sys
+    # sys.exit()
+
+    nuc_instance = nucleosome(k_unwrap=4.0,
+                                   k_wrap=21.0,
+                                   num_nucleosomes=2,
+                                   binding_sites=14)
+
+    protamines_instance = protamines(k_unbind=213,
+                                        k_bind=123,
+                                        p_conc=1.0,
+                                        cooperativity=2.0)
+
+    simulation = GillespieSimulator(nuc_inst=nuc_instance,
+                                    prot_inst=protamines_instance,
+                                    num_nucleosomes=2,
+                                    STEPS=10)
+
+    for state in simulation.run():
+        logger.info(state)
+
+    logger.info('Simulation completed')

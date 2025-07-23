@@ -4,7 +4,7 @@ import numpy as np
 import math
 
 class protamines:
-    def __init__(self, k_unbind, k_bind, p_conc, cooperativity=1):
+    def __init__(self, k_unbind:float, k_bind:float, p_conc:float, cooperativity:float=1):
 
         """defines the unbinding rate of protamine for each bound site
         :param k_unbind: unbinding rate
@@ -27,21 +27,18 @@ class protamines:
         # self.k_ratio = 0.00244
         self.k_ratio = self.k_bind/self.k_unbind 
 
-    def protein_binding(self, open_sites):
+    def protein_binding(self, open_sites:np.ndarray)->dict:
         bind_sites = dict()
         # neigh_dict=dict()
-        sum_rate = 0
         if len(open_sites) != 0:
             for i in open_sites:
                 bind_sites[i] = self.k_bind* self.P_free
                 # print(self.P_free)
-            
-            sum_rate = sum(bind_sites.values())
-
-        return bind_sites, sum_rate
+        
+        return bind_sites
 
 
-    def protein_unbinding(self, bound_sites):
+    def protein_unbinding(self, bound_sites:np.ndarray):
         """defines the unbinding rate of protamine for each bound site
         :param bound_sites: contains the indexes for the protamine bound site
          :return: dictionary with key as the index of the bound sites and value as its unbinding rate.
@@ -78,10 +75,8 @@ class protamines:
             return 0
 
     ##### With Coooperativity, here the cooperativity will make the protamine unbinding difficult.
-    def protein_unbinding_coop(self, nuce, pt_indexes, B=1):
+    def protein_unbinding_coop(self, nuce:np.ndarray, pt_indexes:np.ndarray, beta=1):
         bd_sites = dict()
-        sum_rate = 0
-        beta = B
         J = self.cooperativity
 
         if len(pt_indexes) != 0:
@@ -105,12 +100,26 @@ class protamines:
 
                     #                 bd_sites[i] = k_unbind
                     bd_sites[i] = (self.k_bind * self.P_free) / math.exp(beta * self.delta_E(p=self.P_free, J=J, s_l=s_left, s_r=s_right))
-            # print('Function Bpund Site Pfree', self.P_free)
-            # print('Function Bpund Site Kbind' ,self.k_bind)
-            # print('Function Bpund Site J', J)
-        if len(bd_sites) > 0:
-            sum_rate = sum(bd_sites.values())
-
-        return bd_sites, sum_rate
+         
+        return bd_sites
 
 
+if __name__ == "__main__":
+    # Example usage
+    prot = protamines(k_unbind=234.0, k_bind=123.0, p_conc=2.0, cooperativity=1)
+    open_sites = [0, 2]
+    bound_sites = [1, 12, 13]
+    nuce = np.array([1, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2])  # Example nucleosome state
+
+    bind_rates, sum_bind_rate = prot.protein_binding(open_sites)
+    print("Binding Rates:", bind_rates)
+    print("Sum Binding Rate:", sum_bind_rate)
+
+    # unbind_rates, sum_unbind_rate = prot.protein_unbinding(bound_sites)
+    # print("Unbinding Rates:", unbind_rates)
+    # print("Sum Unbinding Rate:", sum_unbind_rate)
+
+
+    unbind_rates, sum_unbind_rate = prot.protein_unbinding_coop(nuce=nuce, pt_indexes=bound_sites)
+    print("Cooperative Unbinding Rates:", unbind_rates)
+    print("Sum Cooperative Unbinding Rate:", sum_unbind_rate)

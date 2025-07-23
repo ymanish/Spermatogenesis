@@ -17,6 +17,7 @@ dependencies:
   - scikit-learn
   - statsmodels
   - psutil
+  - cython
   - pip:
       - pipdeptree
       - line_profiler
