@@ -1,0 +1,23 @@
+Bootstrap: docker
+From: continuumio/miniconda3
+
+%labels
+    OWNER = Manish Yadav
+
+%files
+    /home/pol_schiessel/maya620d/pol/Projects/Codebase/Spermatogensis/environment.yml /environment.yml
+    /home/pol_schiessel/maya620d/pol/Projects/Codebase/Spermatogensis/backend /opt/backend
+
+%post
+    /opt/conda/bin/conda update -n base conda -c defaults
+    /opt/conda/bin/conda env create -f /environment.yml
+
+%runscript
+    source /opt/conda/etc/profile.d/conda.sh
+    conda activate nucleosome_sim
+    exec "$@"
+
+%environment
+    export PYTHONPATH=/project:/opt/backend
+    export BASH_ENV=/opt/conda/etc/bashrc
+    export PATH=/opt/conda/envs/nucleosome_sim/bin:$PATH 

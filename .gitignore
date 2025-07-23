@@ -1,0 +1,14 @@
+# ignore pythom files
+**__pycache__
+**.pyc
+**.DS_Store
+
+# ignore folders
+backend/
+output/
+data/
+old_scripts/
+# ignore egg-info directory
+**.egg-info/
+
+backend/
