@@ -1,7 +1,7 @@
 
 from enum import IntEnum
 from dataclasses import dataclass
-from typing import List, Dict
+from typing import List, Dict, Optional
 import numpy as np
 from typing import NamedTuple
 
@@ -13,9 +13,12 @@ class SiteState(IntEnum):
 @dataclass
 class SimulationState:
     time: float
-    cs: int
+    cs_total: int
+    detached_total: int
     bprot: int
-    nucs_snapshot: List[np.int32]
+    cs: Optional[List[np.ndarray]] = None 
+    t_blocked: Optional[float] = None
+    nucs_snapshot: Optional[List[np.ndarray]] = None
 
 
 class ReactionType(IntEnum):

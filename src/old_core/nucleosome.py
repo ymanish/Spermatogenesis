@@ -14,7 +14,7 @@ class nucleosome:
         self.N_closed = num_nucleosomes * binding_sites ## total closed sites
 
 
-    def sequence(self):
+    def compute_G(self):
         S = 'ACGCGGATCAAATTT'
         return S
 

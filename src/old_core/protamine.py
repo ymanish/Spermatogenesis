@@ -1,4 +1,4 @@
-#/src/core/protamines.py
+#/src/core/protamine.py
 
 import numpy as np
 import math
@@ -23,10 +23,9 @@ class protamines:
         self.p_conc = p_conc * math.pow(10, -6)  # convert from micro_molar to Molar which is also moles/liter
         self.P_free = self.p_conc * 6 * math.pow(10, 23) * math.pow(10, -15)  # initial concentration of protamines molecules/cubic_micrometer
         self.N_bound = 0
-        # print('Protamine binding rate and molecules' , self.k_bind, self.P_free)
+        print('Protamine binding rate and molecules' , self.k_bind, self.P_free)
         # self.k_ratio = 0.00244
         self.k_ratio = self.k_bind/self.k_unbind 
-        self.K_D = 1/self.k_ratio
 
     def protein_binding(self, open_sites:np.ndarray)->dict:
         bind_sites = dict()
@@ -62,7 +61,7 @@ class protamines:
         ## refer to the task documentation for the derivation of the formulae. The energy here is in terms of Kb*T.
 
         # U = np.log(0.00244 * p)  ## in terms of KT
-        U = np.log(p/self.K_D)  ## in terms of KT  #### If p >> K_d , U >> 0, strongly favoring binding; if $ p << K_d , U < 0,  favoring unbinding.
+        U = np.log(self.k_ratio * p)  ## in terms of KT
 
         #     J=12.6/(1-s_l-s_r)
 
@@ -87,25 +86,21 @@ class protamines:
                     s_right = self.get_spin_value(nuce[i + 1])
 
                     #                 bd_sites[i] = k_unbind
-                    # bd_sites[i] = (self.k_bind * self.P_free )/ math.exp(beta * self.delta_E(p=self.P_free, J=J, s_r=s_right))
-                    ###Since U cancels out, we can use the following formulae
-                    bd_sites[i] = (self.k_unbind)*math.exp(-beta * J*(s_right))
+                    bd_sites[i] = (self.k_bind * self.P_free )/ math.exp(beta * self.delta_E(p=self.P_free, J=J, s_r=s_right))
 
                 elif i == 13:
                     s_left = self.get_spin_value(nuce[i - 1])
 
                     #                 bd_sites[i] = k_unbind
-                    # bd_sites[i] = (self.k_bind * self.P_free) / math.exp(beta * self.delta_E(p=self.P_free, J=J, s_l=s_left))
-                    bd_sites[i] = (self.k_unbind)*math.exp(-beta * J*(s_left))
+                    bd_sites[i] = (self.k_bind * self.P_free) / math.exp(beta * self.delta_E(p=self.P_free, J=J, s_l=s_left))
 
                 else:
                     s_left = self.get_spin_value(nuce[i - 1])
                     s_right = self.get_spin_value(nuce[i + 1])
 
                     #                 bd_sites[i] = k_unbind
-                    # bd_sites[i] = (self.k_bind * self.P_free) / math.exp(beta * self.delta_E(p=self.P_free, J=J, s_l=s_left, s_r=s_right))
-                    bd_sites[i] = (self.k_unbind)*math.exp(-beta * J*(s_left + s_right))
-
+                    bd_sites[i] = (self.k_bind * self.P_free) / math.exp(beta * self.delta_E(p=self.P_free, J=J, s_l=s_left, s_r=s_right))
+         
         return bd_sites
 
 

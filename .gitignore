@@ -4,11 +4,19 @@
 **.DS_Store
 
 # ignore folders
-backend/
+# backend/
 output/
 data/
 old_scripts/
+example/
+hamnucret_data/
+cluster_output/
+temps/
 # ignore egg-info directory
 **.egg-info/
 
 backend/
+
+venv/
+**.sif
+*.lprof

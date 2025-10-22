@@ -277,12 +277,14 @@ class Nucl_Breathing_Sol:
 
 if __name__=='__main__':
 
+    a = 0.01
+
     # Parameters
     gamma = 0       # Absorption rate
-    L = 14.5          # Length of the domain
+    L = 14.0*a         # Length of the domain
     x0 = 13.5         # Initial position
     k_r = 5        # Rate constant for right movement
-    k_u = 6   # Rate constant for left movement
+    k_u = 10   # Rate constant for left movement
     dt = 0.01         # Time step
     T_max = 100.0       # Maximum simulation time
     N_particles = 1000  # Number of particles to simulate
@@ -292,8 +294,8 @@ if __name__=='__main__':
     
     x_positions = np.linspace(0, L, 300)  # Positions for plotting
     # Derived parameters
-    beta = 2 * (k_r - k_u)       # Beta parameter
-    c2 = k_u + k_r               # c^2 parameter
+    beta = a*2 * (k_r - k_u)       # Beta parameter
+    c2 = a*a*(k_u + k_r)               # c^2 parameter
     # c = np.sqrt(c2)              # c parameter
     v = beta                     # Drift velocity
 

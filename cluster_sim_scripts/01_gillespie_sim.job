@@ -1,0 +1,106 @@
+#!/bin/bash
+# ---------------- SLURM parameters ----------------
+#SBATCH -p all.q
+#SBATCH --ntasks 10                 # total logical cores you requested
+#SBATCH --mem-per-cpu=1G
+#SBATCH --cpus-per-task=1
+#SBATCH --cpu-freq=high
+#SBATCH --tmp=5G
+#SBATCH -N 1
+#SBATCH --mail-type=ALL
+#SBATCH -J Gillespie
+#SBATCH -D /home/pol_schiessel/maya620d/Spermatogensis
+#SBATCH --output=/home/pol_schiessel/maya620d/Spermatogensis/log/Array_eukaryote.%A_%a.out
+#SBATCH --error=/home/pol_schiessel/maya620d/Spermatogensis/log/Array_eukaryote.%A_%a.error
+#SBATCH -A undefined
+#SBATCH --exclude=compute-0-[13-15] ###Polars does not work on these nodes
+
+# ---------------- Load modules --------------------
+module load apps/singularity
+
+# ---------------- Runtime setup -------------------
+echo "SLURM job $SLURM_JOB_ID - array task $SLURM_ARRAY_TASK_ID"
+echo "Running on $(hostname -s)   ($(lscpu | grep 'Model name' | sed 's/^.*: //'))"
+# echo "Using temporary directory: $SLURM_TMPDIR"
+export TMPDIR=/tmp/${USER}_${SLURM_JOB_ID}
+mkdir -p "$TMPDIR"
+echo "Using TMPDIR=$TMPDIR"
+
+
+# ------- create a writeable Numba cache unique to this node ----------
+
+# Prevent nested parallelism
+export OMP_NUM_THREADS=2
+export OPENBLAS_NUM_THREADS=2
+export MKL_NUM_THREADS=2
+export NUMBA_NUM_THREADS=2
+
+
+# Calculate zero-padded index (3 digits)
+TASK_ID_PADDED=$(printf "%03d" $SLURM_ARRAY_TASK_ID)
+
+# ----------------PARAMETERS------------------------
+PROM_TYPE="minpoint_unboundpromoter_regions_breath"
+
+HAMNUC_DATA_DIR="/group/pol_schiessel/Manish/HAMNucRetSeq_pipeline/output/$PROM_TYPE/breath_energy"
+
+INFILE="$HAMNUC_DATA_DIR/$TASK_ID_PADDED.tsv"  
+STORAGE_DIR="/group/pol_schiessel/Manish/Spermatogensis/output/$PROM_TYPE/GSim"
+
+
+BATCH_SIZE=100 ##int ### id+subid
+
+K_WRAP=21.0 ##float
+BINDING_SITES=14 ##int
+INF_PROTAMINE="true" ### true/false
+PROT_K_UNBIND=0.23 ##float
+PROT_K_BIND=2113.0 ##float
+PROT_P_CONC=0.1 ##float
+PROT_COOPERATIVITY=0.0 ##float
+
+T_STOP=10.0 ##float
+T_NUM=10000 ##int
+
+
+echo "Processing array job $SLURM_ARRAY_TASK_ID"
+echo "Using input file: $INFILE"
+
+# Check if input file exists
+if [ ! -f "$INFILE" ]; then
+    echo "ERROR: Input file $INFILE not found!"
+    exit 1
+fi
+
+mkdir -p "$STORAGE_DIR"
+
+
+###-----------------RUN THE COMPUTATION -----------------------------------
+
+if [ "$INF_PROTAMINE" = "true" ]; then
+    inf_arg="--inf_protamine"
+else
+    inf_arg=""
+fi
+
+echo "-> Launching main worker script....."
+singularity exec \
+    --env TMPDIR="$TMPDIR" \
+    --bind $PWD:/project,"$TMPDIR":"$TMPDIR" \
+    nucleosome.sif \
+    python3 /project/src/scripts/exec_sim.py \
+        --infile   "$INFILE" \
+        --storage_dir  "$STORAGE_DIR" \
+        --batch_size "$BATCH_SIZE" \
+        --n_workers "$SLURM_NTASKS" \
+        --k_wrap "$K_WRAP" \
+        --binding_sites "$BINDING_SITES" \
+        $inf_arg \
+        --prot_k_unbind "$PROT_K_UNBIND" \
+        --prot_k_bind "$PROT_K_BIND" \
+        --prot_p_conc "$PROT_P_CONC" \
+        --prot_cooperativity "$PROT_COOPERATIVITY" \
+        --t_stop "$T_STOP" \
+        --t_num "$T_NUM" \
+
+
+echo "Gillespie Simulation finished - results in ${STORAGE_DIR}/${TASK_ID_PADDED}.tsv"

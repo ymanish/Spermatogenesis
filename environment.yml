@@ -18,6 +18,8 @@ dependencies:
   - statsmodels
   - psutil
   - cython
+  - polars
   - pip:
       - pipdeptree
       - line_profiler
+      - pyarrow
