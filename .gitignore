@@ -15,7 +15,7 @@ temps/
 # ignore egg-info directory
 **.egg-info/
 
-backend/
+# backend/
 
 venv/
 **.sif
