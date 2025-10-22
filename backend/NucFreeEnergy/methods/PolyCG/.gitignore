@@ -1,0 +1,42 @@
+# ignore pythom build files
+**build/
+**__pycache__
+**.c
+
+# ignore test files and folders
+
+# ignore testdata directory
+**test*/
+**test.*
+**TEST*/
+
+# ignore data directories
+**Data/
+**data/
+**DATA/
+
+# ignore figure directories
+**Fig/
+**Figs/
+**fig/
+**figs/
+**figures/
+**Figures/
+
+# ignore egg-info directory
+**.egg-info/
+
+# changes in subpackages
+**/cgNA_plus/
+**/SO3/
+**/IOPolyMC/
+**/pyConDec
+
+# sampling methods
+**sample_*.py
+
+# todo
+**todo
+
+# ignore unittests
+**unittest*
