@@ -1,0 +1,24 @@
+# ignore test directory
+#**test/
+
+# ignore testdata directory
+**testdata/
+
+# ignore build directories
+**build/
+
+# ignore egg-info directories
+iopolymc.egg-info/
+
+# ignore pycache
+**__pycache__
+
+# ignore all .so files
+**.so
+
+# ignore all .c files
+**.c
+
+# ignore all test files
+**test.py
+test*
