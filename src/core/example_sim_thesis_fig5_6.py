@@ -97,8 +97,8 @@ def run_simulations_for_condition(file_path, ids, subids, k_wrap, binding_sites,
 file_path_bound = "/home/pol_schiessel/maya620d/pol/Projects/Codebase/Spermatogensis/hamnucret_data/exactpoint_boundpromoter_regions_breath/breath_energy/001.tsv"
 file_path_unbound = "/home/pol_schiessel/maya620d/pol/Projects/Codebase/Spermatogensis/hamnucret_data/exactpoint_unboundpromoter_regions_breath/breath_energy/001.tsv"
 
-ids_bound = ["ENST00000046087.7"]      # Bound condition ids
-ids_unbound = ["ENST00000294179.8"]      # Unbound condition ids
+# ids_bound = ["ENST00000046087.7"]      # Bound condition ids
+# ids_unbound = ["ENST00000294179.8"]      # Unbound condition ids
 ids_bound = None
 ids_unbound = None
 
@@ -342,143 +342,150 @@ mpl.rcParams.update({
 
 
 # no_protamne_analysis(save_path=thesis_dir / "Chapter_HistProt" / "SSA")
+
 ##### for this analysis the start_idx in run_simulations_for_condition should be 0 to regenerate the figures
-###and for later 2000
+### and for later 2000
 
 
 # import sys
 # sys.exit(0)
 
+#########################################################
+#########################################################
+###################### WITH PROTAMINE ###################
+#########################################################
+#########################################################
+#########################################################
+
+
+def with_protamine_analysis(save_path=None):
+
+    import seaborn as sns
+    import pandas as pd
+    from matplotlib.ticker import AutoMinorLocator, FuncFormatter, MaxNLocator
+
+
+    # Simulation parameters
+    k_wrap = 1.0
+    binding_sites = 14
+    k_unbind = 0.1
+    k_bind = 1.0
+    inf_protamine = True
+    t_max = 10000.0
+    t_steps = 10000
+    t_points = np.linspace(0, t_max, t_steps)
+    subids_range = None
+    max_nucs = 10
+    p_conc = 0.2
+    cooperativity = 2.0
+
+
+    results_bound = run_simulations_for_condition(
+            file_path_bound, ids_bound, subids=subids_range,
+            k_wrap=k_wrap, binding_sites=binding_sites, t_points=t_points,
+            k_unbind=k_unbind, k_bind=k_bind, p_conc=p_conc, cooperativity=cooperativity,
+            inf_protamine=inf_protamine, max_nucs=max_nucs
+        )
+
+    results_unbound = run_simulations_for_condition(
+            file_path_unbound, ids_unbound, subids=subids_range,
+            k_wrap=k_wrap, binding_sites=binding_sites, t_points=t_points,
+            k_unbind=k_unbind, k_bind=k_bind, p_conc=p_conc, cooperativity=cooperativity,
+            inf_protamine=inf_protamine, max_nucs=max_nucs
+        )
 
 
 
-# def with_protamine_analysis(save_path=None):
+    # --- Ensure we have results and build vr dict ---
+    if not (results_bound and results_unbound):
+        print("No simulation runs were completed for one or both conditions.")
+        return
 
-#     import seaborn as sns
-#     import pandas as pd
-#     from matplotlib.ticker import AutoMinorLocator, FuncFormatter, MaxNLocator
+    avg_cs_bound = np.mean(np.vstack([res[1] for res in results_bound]), axis=0)
+    avg_cs_unbound = np.mean(np.vstack([res[1] for res in results_unbound]), axis=0)
 
+    vr = {
+        'times': t_points,
+        'avg_cs_bound': avg_cs_bound,
+        'avg_cs_unbound': avg_cs_unbound,
+        'p_conc': p_conc,
+        'coop': cooperativity
+    }
 
-#     # Simulation parameters
-#     k_wrap = 1.0
-#     binding_sites = 14
-#     k_unbind = 0.1
-#     k_bind = 1.0
-#     inf_protamine = True
-#     t_max = 10000.0
-#     t_steps = 10000
-#     t_points = np.linspace(0, t_max, t_steps)
-#     subids_range = None
-#     max_nucs = 10
-#     p_conc = 0.2
-#     cooperativity = 2.0
+    # --- compute std (or fallback to zeros) to show uncertainty band ---
+    try:
+        std_cs_bound = np.std(np.vstack([res[1] for res in results_bound]), axis=0)
+        std_cs_unbound = np.std(np.vstack([res[1] for res in results_unbound]), axis=0)
+    except Exception:
+        std_cs_bound = np.zeros_like(vr['avg_cs_bound'])
+        std_cs_unbound = np.zeros_like(vr['avg_cs_unbound'])
 
+    # --- Plot using a single Axes object (improved styling) ---
+    fig, ax = plt.subplots(figsize=(5, 3))
 
-#     results_bound = run_simulations_for_condition(
-#             file_path_bound, ids_bound, subids=subids_range,
-#             k_wrap=k_wrap, binding_sites=binding_sites, t_points=t_points,
-#             k_unbind=k_unbind, k_bind=k_bind, p_conc=p_conc, cooperativity=cooperativity,
-#             inf_protamine=inf_protamine, max_nucs=max_nucs
-#         )
+    # shaded uncertainty (±1 std)
+    ax.fill_between(vr['times'],
+                    np.clip(vr['avg_cs_bound'] - std_cs_bound, 0, binding_sites),
+                    np.clip(vr['avg_cs_bound'] + std_cs_bound, 0, binding_sites),
+                    color='tab:green', alpha=0.12, linewidth=0)
 
-#     results_unbound = run_simulations_for_condition(
-#             file_path_unbound, ids_unbound, subids=subids_range,
-#             k_wrap=k_wrap, binding_sites=binding_sites, t_points=t_points,
-#             k_unbind=k_unbind, k_bind=k_bind, p_conc=p_conc, cooperativity=cooperativity,
-#             inf_protamine=inf_protamine, max_nucs=max_nucs
-#         )
+    ax.fill_between(vr['times'],
+                    np.clip(vr['avg_cs_unbound'] - std_cs_unbound, 0, binding_sites),
+                    np.clip(vr['avg_cs_unbound'] + std_cs_unbound, 0, binding_sites),
+                    color='tab:orange', alpha=0.10, linewidth=0)
 
+    # stronger lines for averages
+    ax.plot(vr['times'], vr['avg_cs_bound'], label='RET', color='tab:green', lw=2.2)
+    ax.plot(vr['times'], vr['avg_cs_unbound'], label='EVI', color='tab:orange', ls='--', lw=2.0)
 
+    # x-axis: plain seconds + minor ticks
+    ax.xaxis.set_major_locator(MaxNLocator(nbins=6))
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: f"{x:.0f}"))
+    ax.xaxis.set_minor_locator(AutoMinorLocator(4))
+    ax.tick_params(axis='x', which='major', length=6)
+    ax.tick_params(axis='x', which='minor', length=3, color='0.3')
 
-#     # --- Ensure we have results and build vr dict ---
-#     if not (results_bound and results_unbound):
-#         print("No simulation runs were completed for one or both conditions.")
-#         return
+    # y-axis: strict integers 0..binding_sites and small padding
+    # ax.set_ylim(0, binding_sites + 0.2)
+    # ax.set_yticks(np.arange(0, binding_sites + 1))
+    # ax.set_ylabel("Wrapped Sites")
+    from matplotlib.ticker import MultipleLocator
 
-#     avg_cs_bound = np.mean(np.vstack([res[1] for res in results_bound]), axis=0)
-#     avg_cs_unbound = np.mean(np.vstack([res[1] for res in results_unbound]), axis=0)
+    ax.set_ylim(0, binding_sites + 0.2)
+    # major ticks every 2 (labelled), minor ticks every 1 (no label)
+    ax.yaxis.set_major_locator(MultipleLocator(2))
+    ax.yaxis.set_minor_locator(MultipleLocator(1))
+    ax.tick_params(axis='y', which='major', length=6)
+    ax.tick_params(axis='y', which='minor', length=3, labelleft=False, color='0.4')
+    ax.set_ylabel("Wrapped Sites")
+    ax.set_title(f"c:{p_conc} $\mathbf{{\mu M}}$," + f" J:{cooperativity} $\mathbf{{k_B T}}$")
 
-#     vr = {
-#         'times': t_points,
-#         'avg_cs_bound': avg_cs_bound,
-#         'avg_cs_unbound': avg_cs_unbound,
-#         'p_conc': p_conc,
-#         'coop': cooperativity
-#     }
+    ax.set_xlabel("Time (s)")
+    ax.grid(which='major', alpha=0.35)
+    ax.grid(which='minor', alpha=0.12)
+    ax.legend(framealpha=0.85,loc='lower left')
 
-#     # --- compute std (or fallback to zeros) to show uncertainty band ---
-#     try:
-#         std_cs_bound = np.std(np.vstack([res[1] for res in results_bound]), axis=0)
-#         std_cs_unbound = np.std(np.vstack([res[1] for res in results_unbound]), axis=0)
-#     except Exception:
-#         std_cs_bound = np.zeros_like(vr['avg_cs_bound'])
-#         std_cs_unbound = np.zeros_like(vr['avg_cs_unbound'])
+    plt.tight_layout()
+    plt.show()
 
-#     # --- Plot using a single Axes object (improved styling) ---
-#     fig, ax = plt.subplots(figsize=(5, 3))
-
-#     # shaded uncertainty (±1 std)
-#     ax.fill_between(vr['times'],
-#                     np.clip(vr['avg_cs_bound'] - std_cs_bound, 0, binding_sites),
-#                     np.clip(vr['avg_cs_bound'] + std_cs_bound, 0, binding_sites),
-#                     color='tab:green', alpha=0.12, linewidth=0)
-
-#     ax.fill_between(vr['times'],
-#                     np.clip(vr['avg_cs_unbound'] - std_cs_unbound, 0, binding_sites),
-#                     np.clip(vr['avg_cs_unbound'] + std_cs_unbound, 0, binding_sites),
-#                     color='tab:orange', alpha=0.10, linewidth=0)
-
-#     # stronger lines for averages
-#     ax.plot(vr['times'], vr['avg_cs_bound'], label='RET', color='tab:green', lw=2.2)
-#     ax.plot(vr['times'], vr['avg_cs_unbound'], label='EVI', color='tab:orange', ls='--', lw=2.0)
-
-#     # x-axis: plain seconds + minor ticks
-#     ax.xaxis.set_major_locator(MaxNLocator(nbins=6))
-#     ax.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: f"{x:.0f}"))
-#     ax.xaxis.set_minor_locator(AutoMinorLocator(4))
-#     ax.tick_params(axis='x', which='major', length=6)
-#     ax.tick_params(axis='x', which='minor', length=3, color='0.3')
-
-#     # y-axis: strict integers 0..binding_sites and small padding
-#     # ax.set_ylim(0, binding_sites + 0.2)
-#     # ax.set_yticks(np.arange(0, binding_sites + 1))
-#     # ax.set_ylabel("Wrapped Sites")
-#     from matplotlib.ticker import MultipleLocator
-
-#     ax.set_ylim(0, binding_sites + 0.2)
-#     # major ticks every 2 (labelled), minor ticks every 1 (no label)
-#     ax.yaxis.set_major_locator(MultipleLocator(2))
-#     ax.yaxis.set_minor_locator(MultipleLocator(1))
-#     ax.tick_params(axis='y', which='major', length=6)
-#     ax.tick_params(axis='y', which='minor', length=3, labelleft=False, color='0.4')
-#     ax.set_ylabel("Wrapped Sites")
-#     ax.set_title(f"c:{p_conc} $\mathbf{{\mu M}}$," + f" J:{cooperativity} $\mathbf{{k_B T}}$")
-
-#     ax.set_xlabel("Time (s)")
-#     ax.grid(which='major', alpha=0.35)
-#     ax.grid(which='minor', alpha=0.12)
-#     ax.legend(framealpha=0.85,loc='lower left')
-
-#     plt.tight_layout()
-#     # plt.show()
-
-#     # save
-#     if save_path is not None:
-#         for ext in ["png", "pdf", "svg"]:
-#             if cooperativity == 0.0:
-#                 plt.savefig(save_path / f"with_protamine_nocop_traj.{ext}",
-#                             dpi=300,
-#                             bbox_inches='tight',
-#                             transparent=True)
-#             else:
-#                 plt.savefig(save_path / f"with_protamine_cop_traj.{ext}",
-#                             dpi=300,
-#                             bbox_inches='tight',
-#                             transparent=True)
+    # save
+    if save_path is not None:
+        for ext in ["png", "pdf", "svg"]:
+            if cooperativity == 0.0:
+                plt.savefig(save_path / f"with_protamine_nocop_traj.{ext}",
+                            dpi=300,
+                            bbox_inches='tight',
+                            transparent=True)
+            else:
+                plt.savefig(save_path / f"with_protamine_cop_traj.{ext}",
+                            dpi=300,
+                            bbox_inches='tight',
+                            transparent=True)
 
 # with_protamine_analysis(save_path=thesis_dir / "Chapter_HistProt" / "SSA")
-# import sys
-# sys.exit(0)
+with_protamine_analysis(save_path=None)
+import sys
+sys.exit(0)
 
 
 

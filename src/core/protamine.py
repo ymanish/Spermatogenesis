@@ -15,18 +15,22 @@ class protamines:
 
 
         self.k_unbind = k_unbind
-        self.k_bind = (k_bind* math.pow(10, -2))/6 # the binding rate is provided in microMolar^-1s^-1. To convert it to s^-1*(molecules/micrometer^3)^-1, multiply by 10^15 for conversion to micrometer^3 from liter, 
-                                                    # then devide by 6*10^23*10^-6 for conversion to molecules from micromolar to molecules. OR simply mutiply by (1/6)*1e-2
+        # self.k_bind = (k_bind* math.pow(10, -2))/6 # the binding rate is provided in microMolar^-1s^-1. To convert it to s^-1*(molecules/micrometer^3)^-1, multiply by 10^15 for conversion to micrometer^3 from liter, 
+        #                                             # then devide by 6*10^23*10^-6 for conversion to molecules from micromolar to molecules. OR simply mutiply by (1/6)*1e-2
 
-        
+        self.k_bind = k_bind  ## in units of s^-1 *(microMolar)^-1
+
         self.cooperativity = cooperativity
-        self.p_conc = p_conc * math.pow(10, -6)  # convert from micro_molar to Molar which is also moles/liter
-        self.P_free = self.p_conc * 6 * math.pow(10, 23) * math.pow(10, -15)  # initial concentration of protamines molecules/cubic_micrometer
+        # self.p_conc = p_conc * math.pow(10, -6)  # convert from micro_molar to Molar which is also moles/liter
+        # self.P_free = self.p_conc * 6 * math.pow(10, 23) * math.pow(10, -15)  # initial concentration of protamines molecules/cubic_micrometer
+
+        self.P_free = p_conc ## in uMolar units
         self.N_bound = 0
         # print('Protamine binding rate and molecules' , self.k_bind, self.P_free)
         # self.k_ratio = 0.00244
         self.k_ratio = self.k_bind/self.k_unbind 
         self.K_D = 1/self.k_ratio
+        # print('Protamine K_D (uMolar): ', self.K_D)
 
     def protein_binding(self, open_sites:np.ndarray)->dict:
         bind_sites = dict()

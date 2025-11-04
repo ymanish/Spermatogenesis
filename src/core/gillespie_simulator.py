@@ -334,14 +334,14 @@ class GillespieSimulator():
             # ###>>>>>>>>>>>>>>>>>>>>>NEW PART<<<<<<<<<<<<<<<<<<<<<<<<<
             # # Check if nucleosome is detached
 
-            # if self.nuc[0].detached==1:  # Assuming single nuc per sim
-            #     # Fill remaining time points with frozen state (ensure correct length)
-            #     # Advance self.t along t_points so downstream code sees monotonically increasing times.
-            #     while i_record < num_points:
-            #         self.t = self.t_points[i_record]
-            #         yield self._get_state()
-            #         i_record += 1
-            #     break  # i_record now == num_points; final fill loop will be skipped
+            # After self._update_detachment_flags()
+            if all(self.nuc[i].detached == 1 for i in range(self.num_nuc)):
+                # Fill remaining t_points with the final (frozen) state so analysis stays easy
+                while i_record < num_points:
+                    self.t = float(self.t_points[i_record])
+                    yield self._get_state()
+                    i_record += 1
+                break   
             # ###<<<<<<<<<<<<<<<<<<<<<<<<<NEW PART>>>>>>>>>>>>>>>>>>>>>>>>>
             
         # Fill any remaining
