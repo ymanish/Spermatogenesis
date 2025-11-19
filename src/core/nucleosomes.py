@@ -29,12 +29,46 @@ class Nucleosome:
         if G_mat is not None:
             self.G_mat = G_mat
         elif sequence is not None and sequence != "":
+            raise NotImplementedError("G matrix computation from sequence is not implemented yet.")
             self.G_mat = self.compute_G_from_sequence()
         else:
             raise ValueError("Either G_mat or sequence must be provided.")
 
 
     def compute_G_from_sequence(self) -> np.ndarray:
+        """
+        Compute the G matrix based on the nucleosome sequence.
+        Constructs the interaction/overlap matrix G for the instance's nucleosome binding
+        sites. Each element G[i, j] should encode the interaction, compatibility, or penalty
+        between binding site i and binding site j as derived from the underlying DNA /
+        nucleosome sequence data held on the object.
+        Warning
+        -------
+        This method currently contains a placeholder implementation. It does NOT perform a
+        sequence-dependent calculation. Instead it returns a float numpy.ndarray of shape
+        (self.binding_sites, self.binding_sites) with zeros on the diagonal and the integer
+        distance (j - i) in the upper triangle (for j > i). This behavior is temporary and
+        is not biologically meaningful. Replace with a proper sequence-based algorithm
+        before using results for analysis or production.
+        Returns
+        -------
+        numpy.ndarray
+            Square matrix G with shape (binding_sites, binding_sites) and dtype float,
+            representing pairwise site interactions as computed from sequence (placeholder
+            semantics until implemented).
+        Raises
+        ------
+        ValueError
+            If self.binding_sites is not a positive integer.
+        Notes
+        -----
+        - Implementers should document the expected normalization, symmetry (if any),
+          and units/meaning of G entries once the real algorithm is added.
+        - Consider raising NotImplementedError or providing a configuration flag if the
+          placeholder should be avoided at runtime.
+        """
+
+        """Compute the G matrix based on the nucleosome sequence."""
         G = np.zeros((self.binding_sites, self.binding_sites), dtype=float)
         ###Placeholder logic for G matrix computation based on sequence
         

@@ -1,249 +1,86 @@
+"""
+DEPRECATED: exec_sim.py
+=======================
+
+This file is deprecated and maintained only for backward compatibility.
+Please use the new modular simulation package instead:
+
+    from src.simulation import run_simulation
+
+Or use the CLI:
+
+    python -m src.simulation.cli --help
+
+Author: MY
+Date: 2025-11-16
+"""
 
 import os
 if os.environ.get("IMPORT_ENV_SETTINGS", "1") == "1":
-    from src.config.env_setting import *  # Triggers env_settings import
+    from src.config.env_setting import *
 
-import itertools
-import concurrent.futures
-import os
-import pickle
-from functools import partial
-from tqdm import tqdm
-from src.core.nucleosomes import Nucleosomes, Nucleosome
-from src.core.protamine import protamines
-from src.core.gillespie_simulator import GillespieSimulator
-from src.core.build_nucleosomes import nucleosome_generator 
-import src.core.helper.bkeep as bk
+import warnings
+import time
 import datetime as dt
-from typing import List, Iterable, Optional
-import psutil
 import numpy as np
-from src.utils.logger_util import get_logger
-import polars as pl
-import shutil
 from pathlib import Path
-from src.config.storage import SimulationStorage
-import time 
-import pandas as pd
-import pyarrow as pa
+from typing import Optional
 import logging
 
-def batcher(it, size):  
-    it = iter(it)
-    for first in it:
-        batch = list(itertools.chain([first], itertools.islice(it, size - 1)))
-        yield batch
+# Import from new modular package
+from src.simulation import run_simulation
+from src.utils.logger_util import get_logger
+from src.config.storage import SimulationStorage
+from src.config.path import RESULTS_DIR
+
+# Show deprecation warning
+warnings.warn(
+    "exec_sim.py is deprecated. Use 'from src.simulation import run_simulation' "
+    "or 'python -m src.simulation.cli' instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 
-def run_batch_simulations(batch: List[Nucleosome], 
-                          k_wrap: float, 
-                          tau_min: float,
-                          prot_params: dict, 
-                          t_points: np.ndarray, 
-                          inf_protamine: bool = True, 
-                          kT: float = 1.0, 
-                          binding_sites: int = 14, 
-                          eq_frac: float = 0.25, 
-                          save_trajectories: bool = False):
+def main(file_path: Path, traj_outfile: Path, tsv_outfile: Path,
+        k_wrap: float, prot_params: dict, replicates: int = 20, binding_sites: int = 14,
+        batch_size: int = 10, n_workers: int = 4, flush_every: int = 10000,
+            tau_points: np.ndarray = None, 
+            inf_protamine: bool = True, 
+            save_trajectories: bool = False,
+            renucleation: bool = False, 
+            maxpoints_saved_trajectories: int = 100,
+            logger: Optional[logging.Logger] = None) -> None:
     """
-    Run Gillespie simulations for a batch of nucleosomes, return temp file path with pickled results.
+    DEPRECATED: Use run_simulation from src.simulation instead.
+    
+    This function is maintained for backward compatibility only.
     """
-    assert 0.0 < eq_frac <= 1.0, "eq_frac must be between 0 and 1, Telling how much of the trajectory to consider for equilibrium"
-    start_g = dt.datetime.now()
-    proc = psutil.Process(os.getpid())
-    bk.WORKER_LOGGER.info("Processing batch of %d sequences", len(batch))
-
-    # Temp Parquet for trajectories
-    traj_data = {'id': [], 'subid': [], 'time': [], 'cs_total': [], 'bprot': [], 'detached_total': []}
-
-    tmpfile_tsv, writer_tsv = bk.new_batch_writer(fmt="tsv", suffix=".tsv")
-    bk.WORKER_LOGGER.info("Temporary file created: %s", tmpfile_tsv)
-
-    parquet_path = None
-    if save_trajectories:
-        parquet_path = bk.new_batch_writer(fmt="parquet", suffix=".parquet")
-        bk.WORKER_LOGGER.info("Temporary Parquet file created: %s", parquet_path)
-
-    for nuc_idx, nuc in enumerate(batch):
-        nucs = Nucleosomes(
-            k_wrap       = k_wrap,
-            kT           = kT,
-            nucleosomes  = [nuc], # Wrap single nucleosome
-            binding_sites= binding_sites,
-        ) # Wrap single
-        prot_inst = protamines(**prot_params)
-        sim = GillespieSimulator(nuc_inst=nucs, 
-                                 prot_inst=prot_inst,
-                                   t_points=t_points, 
-                                      max_steps=None,
-                                   inf_protamine=inf_protamine, 
-                                   seed=42, 
-                                   tau_min=tau_min)
-
-        # Process states iteratively (avoid list(sim.run()))
-        times = []
-        cs_totals = []
-        bprots = []
-        detached_totals = []
-        eq_cs_sum = 0
-        eq_bprot_sum = 0
-        eq_count = 0
-        detach_time = -1.0
-        total_steps = len(t_points)
-        eq_start = int(total_steps * (1 - eq_frac))
-        
-        for step, state in enumerate(sim.run()):  # run() yields one by one
-
-            if save_trajectories:
-                times.append(state.time)
-                cs_totals.append(state.cs_total)
-                bprots.append(state.bprot)
-                detached_totals.append(state.detached_total)  # Single nuc
-            
-            if state.detached_total > 0 and detach_time < 0:
-                detach_time = state.time  # First detachment
-            
-            if step >= eq_start:
-                eq_cs_sum += state.cs_total
-                eq_bprot_sum += state.bprot
-                eq_count += 1
-        
-        # Trajectories to Parquet data (still lists, but smaller if eq_frac high)
-        if save_trajectories:
-            ids_arr = np.full(total_steps, nuc.id)
-            subids_arr = np.full(total_steps, nuc.subid)
-            traj_data['id'].extend(ids_arr)
-            traj_data['subid'].extend(subids_arr)
-            traj_data['time'].extend(times)
-            traj_data['cs_total'].extend(cs_totals)
-            traj_data['bprot'].extend(bprots)
-            traj_data['detached_total'].extend(detached_totals)
-
-        # Means for TSV
-        eq_cs = eq_cs_sum / eq_count if eq_count > 0 else 0
-        eq_bprot = eq_bprot_sum / eq_count if eq_count > 0 else 0
-        writer_tsv.writerow([nuc.id, nuc.subid, eq_cs, eq_bprot, detach_time])
-
-    rss = proc.memory_info().rss / 2**20 ## CONVERT FROM BYTES TO MB
-    bk.WORKER_LOGGER.info("Batch of %d done by %s; RSS %.1f MB; t %.1fs",
-                len(batch), os.getpid(),
-                rss, (dt.datetime.now() - start_g).total_seconds())
-
-    if save_trajectories:
-        pa.set_cpu_count(1)  # Limits compute threads (e.g., for encoding/compression)
-        pa.set_io_thread_count(1)  # Limits I/O threads (e.g., for file handling)
-        df = pd.DataFrame(traj_data)
-        df.to_parquet(parquet_path, engine="pyarrow")
-    else:
-        parquet_path = None
-
-    bk.WORKER_LOGGER.info("Temporary file %s written", tmpfile_tsv.name)
-    return tmpfile_tsv.name, parquet_path
-
-
-
-
-def _compute_tau_min(k_wrap: float, ends: int = 2, gamma: float = 5.0) -> float:
-    # If either end can initiate rewrap from fully unwrapped, ends=2
-    import math
-    w0 = ends * float(k_wrap)
-    t099 = math.log(100.0) / w0
-    return gamma * t099
-
-def main(
-         file_path: Path,
-         traj_outfile: Path,
-         tsv_outfile: Path,
-        k_wrap: float,
-        prot_params: dict, 
-        binding_sites: int = 14,
-         batch_size: int = 10, 
-         n_workers: int = 4,
-         flush_every: int = 10000,
-         t_points: np.ndarray = None, 
-         inf_protamine: bool = True, 
-         save_trajectories: bool = False, logger: Optional[logging.Logger] = None) -> None:
-
-    # if prot_params is None:
-    #     prot_params = {'k_unbind': 0.23, 'k_bind': 2113, 'p_conc': 0.05, 'cooperativity': 1.0}
-
-    ### Generator of nucleosomes
-    gen = nucleosome_generator(file_path=file_path, k_wrap=k_wrap, binding_sites=binding_sites, subids=np.arange(2000, 2050).tolist())
-    gen = itertools.islice(gen, 200)
-    # Define how many copies you want
-
-    # gen = nucleosome_generator(file_path=file_path, k_wrap=k_wrap, binding_sites=binding_sites,
-    #                                 subids=[2066, 2076])  # Example subids
-    # # Pick one sequence from the generator (e.g., the first one)
-    # first_sequence = next(gen)
-
-    # # Now pass the replicated generator to the batcher
-    # n = 200
-    # replicated_gen_list = [
-    #     Nucleosome(
-    #         nuc_id=first_sequence.id,
-    #         subid=first_sequence.subid,
-    #         sequence=first_sequence.sequence,
-    #         G_mat=first_sequence.G_mat.copy(),  # ensure a new copy of the matrix
-    #         k_wrap=k_wrap,
-    #         kT=first_sequence.kT,
-    #         binding_sites=binding_sites
-    #     )
-    #     for _ in range(n)
-    # ]
-
-    # batches = batcher(replicated_gen_list, batch_size)
-
-
-    batches = batcher(gen, batch_size)
-
-
-    tau_min = _compute_tau_min(k_wrap=k_wrap, ends=2, gamma=5.0)
-
-
-    temp_parquet_paths = []
-    temp_tsv_paths = []
-
-    with concurrent.futures.ProcessPoolExecutor(max_workers=n_workers,
-                                                initializer=bk.init_worker, 
-                                                initargs=(flush_every,)) as pool:
-        func = partial(run_batch_simulations, 
-                       prot_params=prot_params, 
-                       t_points=t_points, 
-                       binding_sites=binding_sites,
-                       inf_protamine=inf_protamine, 
-                       save_trajectories=save_trajectories,
-                       tau_min=tau_min)
-        futures = [pool.submit(func, batch=batch, k_wrap=k_wrap) for batch in batches]
-
-        for fut in tqdm(concurrent.futures.as_completed(futures), desc="Processing batches"):
-            tsv_path, parquet_path = fut.result()
-            temp_parquet_paths.append(parquet_path)
-            temp_tsv_paths.append(tsv_path)
-    if save_trajectories:
-        os.environ['POLARS_MAX_THREADS'] = str(n_workers)
-        logger.info("All batches processed, writing final output files")
-        # Merge Parquet (lazy concat)
-        df_lazy = pl.concat([pl.scan_parquet(p) for p in temp_parquet_paths], how='vertical')
-        df_lazy.sink_parquet(traj_outfile)  # Writes without full materialization
-
-    else:
-        traj_outfile = None
-    HEADER = ['id', 'subid', 'cs_total', 'bprot', 'detach_time']
-    # Merge temp files into final output
-    with open(tsv_outfile, "w") as final_tsv:
-        final_tsv.write(("\t".join(HEADER) + "\n"))
-        
-        for path in temp_tsv_paths:
-            with open(path, "r") as src:
-                shutil.copyfileobj(src, final_tsv)
-            os.remove(path)
-    if save_trajectories:
-        for p in temp_parquet_paths:
-            os.remove(p)
-
-    logger.info(f"Trajectories saved to: {traj_outfile}")
-    logger.info(f"Summary saved to: {tsv_outfile}")
+    warnings.warn(
+        "main() in exec_sim.py is deprecated. Use run_simulation() from src.simulation",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    
+    # Call the new modular function
+    run_simulation(
+        file_path=file_path,
+        traj_outfile=traj_outfile,
+        tsv_outfile=tsv_outfile,
+        k_wrap=k_wrap,
+        prot_params=prot_params,
+        replicates=replicates,
+        binding_sites=binding_sites,
+        batch_size=batch_size,
+        n_workers=n_workers,
+        flush_every=flush_every,
+        tau_points=tau_points,
+        inf_protamine=inf_protamine,
+        save_trajectories=save_trajectories,
+        renucleation=renucleation,
+        maxpoints_saved_trajectories=maxpoints_saved_trajectories,
+        logger=logger
+    )
 
 
 def arg_parser():
@@ -269,12 +106,22 @@ def arg_parser():
     parser.add_argument("--prot_k_bind", type=float, default=10.0, help="Protamine binding rate.")
     parser.add_argument("--prot_p_conc", type=float, default=0.0, help="Protamine concentration.")
     parser.add_argument("--prot_cooperativity", type=float, default=0.0, help="Protamine cooperativity factor.")
+    parser.add_argument("--replicates", type=int, default=20, help="Replicates per nucleosome")
+
     
     # Time points configuration
-    parser.add_argument("--t_stop", type=float, default=10.0, help="Simulation end time.")
-    parser.add_argument("--t_num", type=int, default=10000, help="Number of time points.")
+    parser.add_argument("--t_stop", type=float, default=10.0, help="Simulation end time in physical units (e.g seconds).")
+    parser.add_argument("--t_num", type=int, default=1000, help="Number of time points to sample in physical units. " \
+                                                                "Evaluate the state of system at these points in simulator.")
+    parser.add_argument("--tau_stop", type=float, default=None, help="Dimensionless end time tau_max (overrides --t_stop if set).")
+    parser.add_argument("--tau_num", type=int, default=None, help="Number of tau-sample points (defaults to --t_num if not set)." \
+                                                                  "Evaluate the state of system at these points in simulator.")
+    parser.add_argument("--maxpoints_saved_trajectories", type=int, default=100, help="Maximum number of trajectory datapoints to save out of the total datapoints." \
+                                                                                        "For example, if tau_num=1000 and maxpoints_saved_trajectories=100, " \
+                                                                                        "then every 10th point will be saved as trajectory data.")
 
     parser.add_argument("--save_trajectories", action="store_true", help="Save trajectory data (default: False).")
+    parser.add_argument("--renucleation", action="store_true", help="Enable renucleation (default: False).")
 
     return parser.parse_args()
 
@@ -294,30 +141,13 @@ if __name__ == "__main__":
     # TSV_INFILE = Path("/home/pol_schiessel/maya620d/pol/Projects/Codebase/Spermatogensis/hamnucret_data/boundprom/breath_energy/001.tsv") 
     # STORAGE_DIR = RESULTS_DIR /"boundprom/GSim"
 
-
     args = arg_parser()
     if args.infile:
         TSV_INFILE = args.infile
     if args.storage_dir:
         STORAGE_DIR = args.storage_dir
 
-    batch_size = args.batch_size
-    n_workers = args.n_workers
-    flush_every = args.flush_every
 
-    ### Simulation parameters
-    k_wrap = args.k_wrap
-    binding_sites = args.binding_sites
-    inf_protamine = args.inf_protamine
-    prot_k_unbind = args.prot_k_unbind
-    prot_k_bind = args.prot_k_bind
-    prot_p_conc = args.prot_p_conc
-    prot_cooperativity = args.prot_cooperativity
-    t_stop = args.t_stop
-    t_num = args.t_num
-    save_trajectories = args.save_trajectories
-
-    print("args:", args)
     if not TSV_INFILE.exists():
         raise FileNotFoundError(f"FASTA file {TSV_INFILE} does not exist. Please check the path.")
 
@@ -326,23 +156,47 @@ if __name__ == "__main__":
 
 
     storage = SimulationStorage(base_dir=STORAGE_DIR)
-    t_points = np.linspace(0, t_stop, t_num)
-    print(f"prot_p_conc: {prot_p_conc}, prot_k_unbind: {prot_k_unbind}, prot_k_bind: {prot_k_bind}")
+    # t_points = np.linspace(0, t_stop, t_num)
+
+    #### Decide sampling grid in tau (dimensionless)
+    if args.tau_stop is not None:
+        tau_stop = float(args.tau_stop)
+        tau_num = int(args.tau_num or args.t_num)
+    else:
+        ### Back-compat: user provided t_stop; convert to tau via tau = k_wrap * t
+        tau_stop = float(args.k_wrap) * float(args.t_stop)
+        tau_num = int(args.t_num)
+
+    tau_points = np.linspace(0.0, tau_stop, tau_num) ### dimensionless time points
+    ### Convert back to physical time points via t = tau / k_wrap
+    
+    # Validate maxpoints_saved_trajectories
+    if args.save_trajectories and args.maxpoints_saved_trajectories is not None:
+        if args.maxpoints_saved_trajectories > tau_num:
+            raise ValueError(
+                f"maxpoints_saved_trajectories ({args.maxpoints_saved_trajectories}) cannot be greater than "
+                f"tau_num ({tau_num}). maxpoints_saved_trajectories determines how many points to save "
+                f"from the total tau_num points. Either increase tau_num or decrease maxpoints_saved_trajectories."
+            )
+        logger.info(f"Trajectory saving: will save {args.maxpoints_saved_trajectories} points out of {tau_num} total points "
+                   f"(stride: {max(1, int(np.ceil(tau_num / args.maxpoints_saved_trajectories)))})")
+
+    logger.info(f"prot_p_conc: {args.prot_p_conc}, prot_k_unbind: {args.prot_k_unbind}, prot_k_bind: {args.prot_k_bind}")
 
     prot_params = {
-        'k_unbind': prot_k_unbind,
-        'k_bind': prot_k_bind,
-        'p_conc': prot_p_conc,
-        'cooperativity': prot_cooperativity
+        'k_unbind': args.prot_k_unbind,
+        'k_bind': args.prot_k_bind,
+        'p_conc': args.prot_p_conc,
+        'cooperativity': args.prot_cooperativity
     }
 
     params = {
-        'k_wrap': k_wrap,
+        'k_wrap': args.k_wrap,
         'prot_params': prot_params,
-        'binding_sites': binding_sites,
-        't_max': t_stop,
-        't_steps': t_num,
-        'inf_protamine': inf_protamine
+        'binding_sites': args.binding_sites,
+        'tau_max': args.tau_stop,
+        'tau_steps': args.tau_num,
+        'inf_protamine': args.inf_protamine
     }
 
 
@@ -355,14 +209,19 @@ if __name__ == "__main__":
     main(file_path=TSV_INFILE,
          traj_outfile=traj_outfile,
          tsv_outfile=tsv_outfile,
-            k_wrap=k_wrap,
+            k_wrap=args.k_wrap,
+            replicates=args.replicates,
             prot_params=prot_params,
-            binding_sites=binding_sites,
-            batch_size=batch_size,
-            n_workers=n_workers,
-            t_points=t_points,
-            inf_protamine=inf_protamine,
-            save_trajectories=save_trajectories
+            binding_sites=args.binding_sites,
+            batch_size=args.batch_size,
+            n_workers=args.n_workers,
+            tau_points=tau_points,
+            inf_protamine=args.inf_protamine, 
+            save_trajectories=args.save_trajectories,
+            maxpoints_saved_trajectories=args.maxpoints_saved_trajectories,
+            renucleation=args.renucleation,
+            flush_every=args.flush_every,
+            logger=logger,
     )
 
 

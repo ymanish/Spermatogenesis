@@ -19,13 +19,20 @@ class GillespieSimulator():
                  t_points: np.ndarray | None, max_steps: int | None,
                    inf_protamine: bool = False, 
                    seed: int | None = 25, 
-                   tau_min: float | None = None):  
+                   tau_min: float | None = None, 
+                    tau_points: np.ndarray | None = None):  
 
-        if t_points is None and max_steps is None:
-            raise ValueError("Either t_points or max_steps must be provided for Gillespie simulation.")
+        if (t_points is None) and (tau_points is None) and (max_steps is None):
+            raise ValueError("Provide tau_points (preferred), or t_points, or max_steps.")
         
         self.nuc = nuc_inst
         self.prot = prot_inst
+
+        ##### keep reference rate and tau sampling grid
+        self.k_wrap = float(self.nuc.k_wrap)
+        self.tau_points = None if tau_points is None else np.asarray(tau_points, dtype=float)
+        self.tau = 0.0
+
         self.t_points = t_points
         self.t = 0.0
         self.num_nuc = self.nuc.num_nucleosomes
@@ -147,13 +154,19 @@ class GillespieSimulator():
 
     def _update_detachment_flags(self):
         if self.tau_min is None:
-            return
-        for i in range(self.num_nuc):
-            if self.nuc[i].detached == 0 and self.nuc[i].n_closed == 0:
-                t0 = self._unwrapped_since[i]
-                if not math.isnan(t0) and ((self.t - t0) >= self.tau_min):  # t0 not NaN
+            ### Immediate absorption at the first visit to the fully unwrapped state
+            for i in range(self.num_nuc):
+                if self.nuc[i].detached == 0 and self.nuc[i].n_closed == 0:
                     self.nuc[i].detached = 1
                     self.nuc[i].detach_time = self.t
+            return
+        
+        for i in range(self.num_nuc):
+            if self.nuc[i].detached == 0 and self.nuc[i].n_closed == 0:
+                t0 = self._unwrapped_since[i] ##Stored in tau
+                if not math.isnan(t0) and ((self.tau - t0) >= self.tau_min):  # t0 not NaN
+                    self.nuc[i].detached = 1
+                    self.nuc[i].detach_time = self.t ##seconds
 
     def _update_species_count(self, reaction:ReactionChoice):
         if reaction is None:
@@ -169,7 +182,7 @@ class GillespieSimulator():
             ###NEW PART
             if self.nuc[nuc_idx].n_closed == 0:
                 if math.isnan(self._unwrapped_since[nuc_idx]):
-                    self._unwrapped_since[nuc_idx] = self.t   # start dwell clock
+                    self._unwrapped_since[nuc_idx] = self.tau   # start dwell clock
 
 
         if reaction.reaction == ReactionType.REWRAPPING:
@@ -248,16 +261,6 @@ class GillespieSimulator():
         # detach_times = np.array([self.nuc[i].detach_time for i in range(self.num_nuc)])
         # detach_times_total = detach_times.sum()
 
-        frac_blocked = []
-        for i in range(self.num_nuc):
-            nuc = self.nuc[i]
-            t_total = getattr(nuc, "t_total", 0.0)
-            t_block = getattr(nuc, "t_block", 0.0)
-            # if t_total > 0:
-            #     frac_blocked.append(t_block / t_total)
-            # else:
-            #     frac_blocked.append(0.0)
-
         if not takecs_snapshot:
             cs = None
 
@@ -265,20 +268,33 @@ class GillespieSimulator():
             nucs_snapshot = [self.nuc[i].state.copy() for i in range(self.num_nuc)]
         else:
             nucs_snapshot = None
-        return SimulationState(time=self.t, 
-                                cs=cs,
+        return SimulationState(tau =self.tau,
+                                time=self.t, 
                                 cs_total=cs_total,
                                 detached_total=detached_tot,
-                                bprot=self.prot.N_bound,
-                                t_blocked=t_block,
-                                nucs_snapshot=nucs_snapshot)
+                                bprot=self.prot.N_bound)
 
     def run(self) -> Iterator[SimulationState]:
 
-        """Run the Gillespie simulation for tpoints steps."""
+        """Run the Gillespie simulation; advance natively in tau. 
+        Sample on self.tau_points if provided, else on legacy self.t_points (converted to tau)."""
+
+        ### Decide sampling grid (prefer tau)
+        if self.tau_points is not None:
+            grid_tau = self.tau_points.astype(float)
+        else:
+            #### Legacy: build tau grid from provided t_points
+            if self.t_points is None:
+                raise RuntimeError("No sampling grid: provide tau_points or t_points.")
+            grid_tau = (np.asarray(self.t_points, dtype=float) * self.k_wrap)
 
         i_record = 0
-        num_points = len(self.t_points)
+        num_points = len(grid_tau)
+
+        ##### Ensure clocks start consistent
+        self.tau = 0.0
+        self.t   = 0.0
+
         while i_record < num_points:
 
             # logger.info(f'Simulation step {n+1}/{self.STEPS} >>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<\n')
@@ -292,41 +308,49 @@ class GillespieSimulator():
             if total_rate <= 0:
                 print(f'No reactions possible, exiting simulation : total_rate = {total_rate}')
                 print(f'self._get_state() at step {i_record}: {self._get_state()}')
-                # Yield remaining time point states
+                ### Yield remaining time point states
                 while i_record < num_points:
-                    self.t = self.t_points[i_record]
-                    self._update_detachment_flags()
+                    self.tau = grid_tau[i_record]
+                    self.t = float(self.tau / self.k_wrap)
+                    ####Only needed for dwell-based eviction
+                    if self.tau_min is not None:
+                        self._update_detachment_flags()
                     yield self._get_state()
                     i_record += 1
                 break
 
-            # advance reaction time
+            ### Draw dimensionless time increment
             u_ = self._uniform_pos_arg()
-            dt = np.log(1 / u_) / total_rate
-            te = self.t + dt
+            dtau = np.log(1 / u_) * (self.k_wrap / total_rate)
+            tau_event = self.tau + dtau
 
              # accumulate end‑blocking / residence time for the current state
-            self._accumulate_end_blocking(dt)
+            # self._accumulate_end_blocking(dt)
 
             # Yield at crossed time points
-            while i_record < num_points and self.t_points[i_record] < te:
-                self.t = float(self.t_points[i_record])   # <-- advance time to that grid point
-                self._update_detachment_flags()           # <-- check τ_min at this time
+            while i_record < num_points and grid_tau[i_record] < tau_event:
+                self.tau = float(grid_tau[i_record])   # <-- advance time to that grid point
+                self.t = self.tau / self.k_wrap
+                if self.tau_min is not None:
+                    self._update_detachment_flags()           # <-- check tau_min at this time
                 yield self._get_state()
                 i_record += 1
             
             if i_record >= num_points:
                 break
 
-            self.t = te
+            #### Advance to event time in tau and convert to seconds for output
+            self.tau = tau_event
+            self.t   = self.tau / self.k_wrap
+            ### Choose reaction
             reaction_choice = self._choose_reaction(rates)
             react_rates = rates[reaction_choice.nuc_idx].persite
 
-            # Perform reaction
+            #### Perform reaction
             self.perform_reaction(reaction_choice,
                                     persite=react_rates)
 
-            # Update the species count
+            #### Update the species count
             self._update_species_count(reaction_choice)
 
             self._update_detachment_flags()
@@ -338,7 +362,8 @@ class GillespieSimulator():
             if all(self.nuc[i].detached == 1 for i in range(self.num_nuc)):
                 # Fill remaining t_points with the final (frozen) state so analysis stays easy
                 while i_record < num_points:
-                    self.t = float(self.t_points[i_record])
+                    self.tau = float(grid_tau[i_record])
+                    self.t   = self.tau / self.k_wrap
                     yield self._get_state()
                     i_record += 1
                 break   
@@ -346,13 +371,17 @@ class GillespieSimulator():
             
         # Fill any remaining
         while i_record < num_points:
-            self.t = self.t_points[i_record]
-            self._update_detachment_flags()
+            self.tau = float(grid_tau[i_record])
+            self.t   = self.tau / self.k_wrap
+            if self.tau_min is not None:
+                self._update_detachment_flags()
             yield self._get_state()
             i_record += 1
 
 
     def run_steps(self) -> Iterator[SimulationState]:
+        raise DeprecationWarning("!!!!!!!!!!!!!! run_steps is deprecated; use run() with tau_points instead. OR update the " \
+        "run_steps() method to advance in tau instead of t. !!!!!!!!!!!!!!")
         step = 0
         while step < self.max_steps:
             rates = [self.calculate_rates(i) for i in range(self.num_nuc)]
@@ -394,15 +423,15 @@ if __name__ == "__main__":
 
     k_wrap = 1.0
     binding_sites = 14
-    k_unbind = 0.01
+    k_unbind = 89.7
     k_bind = 1.0
-    p_conc = 0.1
-    cooperativity = 0.0
+    p_conc = 100
+    cooperativity = 4.5
     
-    t_max = 10000.0
-    t_steps = 10000
+    tau_max = 10000.0
+    tau_steps = 10000
     inf_protamine = True
-    t_points = np.linspace(0, t_max, t_steps)
+    tau_points = np.linspace(0, tau_max, tau_steps)
 
     gen = nucleosome_generator(file_path=file_path_unbound, k_wrap=k_wrap,
                                binding_sites=binding_sites,
@@ -425,14 +454,15 @@ if __name__ == "__main__":
         prot_inst = protamines(k_unbind=k_unbind, k_bind=k_bind, p_conc=p_conc, cooperativity=cooperativity)
         sim = GillespieSimulator(nuc_inst=nucs, 
                                 prot_inst=prot_inst,
-                                t_points=t_points, 
+                                t_points=None,
                                 max_steps=None,
-                                inf_protamine=inf_protamine, seed=4, 
-                                tau_min=60.0)
+                                inf_protamine=inf_protamine, 
+                                seed=4,
+                                tau_points=tau_points)
         times = []
         cs_list = []
         for st in sim.run():
-            times.append(st.time)
+            times.append(st.tau)
             cs_list.append(st.cs_total)
         # Convert to numpy arrays
         times = np.array(times)
@@ -449,7 +479,7 @@ if __name__ == "__main__":
         plt.plot(avg_times, avg_cs, color="C0", lw=2, label="Average Total Wrapped")
         plt.xlabel("Time")
         plt.ylabel("Total wrapped (n_closed)")
-        plt.xlim(0, t_max)
+        plt.xlim(0, tau_max)
         plot_title = f"Average Total Wrapped Over Time (k_wrap={k_wrap}, k_unbind={k_unbind}, k_bind={k_bind}, p_conc={p_conc}, coop={cooperativity})"
         plt.title(plot_title)
         plt.legend()

@@ -7,11 +7,19 @@ from pathlib import Path
 import tempfile
 from src.utils.logger_util import get_logger
 import logging
-
+import itertools
 
 SCRATCH_PATH  = None
 FLUSH_EVERY   = None
 WORKER_LOGGER = None
+
+
+
+def batcher(it, size):  
+    it = iter(it)
+    for first in it:
+        batch = list(itertools.chain([first], itertools.islice(it, size - 1)))
+        yield batch
 
 def init_worker(flush_every: int = 10000):
     """Run once in every child before it executes any task."""

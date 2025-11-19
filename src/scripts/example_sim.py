@@ -14,35 +14,58 @@ from src.core.nucleosomes import Nucleosomes
 from src.core.protamine import protamines
 from src.core.gillespie_simulator import GillespieSimulator
 
-def simulate_single(nuc, k_wrap, binding_sites, t_points,
-                    k_unbind, k_bind, p_conc, cooperativity, inf_protamine, tau_min):
+import copy
+from functools import partial
+from src.config.var import seed_for
+
+
+def simulate_single(nuc, k_wrap, binding_sites, tau_points,
+                    build_params, inf_protamine, R, tau_min=None):
     """
     Given a single nucleosome object 'nuc', set up the simulation components,
-    run the GillespieSimulator and return the time vector and the cs_total array.
+    run the GillespieSimulator R times and return the averaged time vector, cs_total array, and bprot array.
     """
-    print(f"Simulating nucleosome: {nuc.id}, subid: {nuc.subid}")
-    # Build the Nucleosomes object wrapping the single nucleosome:
-    nucs = Nucleosomes(k_wrap=k_wrap, kT=1.0, nucleosomes=[nuc], binding_sites=binding_sites)
-    # Create the protamine instance using provided parameters:
-    prot_inst = protamines(k_unbind=k_unbind, k_bind=k_bind, p_conc=p_conc, cooperativity=cooperativity)
-    # Initialize simulator with a fixed seed (or parameterize as needed)
-    sim = GillespieSimulator(nuc_inst=nucs,
-                             prot_inst=prot_inst,
-                             t_points=t_points,
-                             max_steps=None,
-                             inf_protamine=inf_protamine,
-                             seed=4, 
-                             tau_min=tau_min)
-    times = []
-    cs_list = []
-    bprot_list = []
-    t_block = []
-    for st in sim.run():
-        times.append(st.time)
-        cs_list.append(st.cs_total)
-        bprot_list.append(st.bprot)
-        t_block.append(st.t_blocked)
-    return np.array(times), np.array(cs_list), np.array(bprot_list), np.array(t_block)
+    print(f"Simulating nucleosome: {nuc.id}, subid: {nuc.subid} with {R} replicates")
+    
+    all_cs = []
+    all_bprot = []
+    times = None
+    
+    for r in range(R):
+        # Fresh instances per replicate
+        nucs = build_params['nucs_factory'](nuc)
+        prots = build_params['prot_factory']()
+        seed = seed_for(nuc, r)
+
+        sim = GillespieSimulator(nuc_inst=nucs, 
+                                 prot_inst=prots,
+                                 t_points=None, 
+                                 max_steps=None,
+                                 tau_points=tau_points,
+                                 inf_protamine=inf_protamine,
+                                 seed=seed, 
+                                 tau_min=tau_min)
+        
+        times_r = []
+        cs_list = []
+        bprot_list = []
+        for st in sim.run():
+            times_r.append(st.tau)
+            cs_list.append(st.cs_total)
+            bprot_list.append(st.bprot)
+        
+        # Store times from first replicate (all should be identical)
+        if times is None:
+            times = np.array(times_r)
+        
+        all_cs.append(np.array(cs_list))
+        all_bprot.append(np.array(bprot_list))
+    
+    # Average across replicates
+    avg_cs = np.mean(np.vstack(all_cs), axis=0)
+    avg_bprot = np.mean(np.vstack(all_bprot), axis=0)
+    
+    return times, avg_cs, avg_bprot
 
 
 
@@ -54,8 +77,22 @@ def _compute_tau_min(k_wrap: float, ends: int = 2, gamma: float = 3.0) -> float:
     t099 = np.log(100.0) / w0
     return gamma * t099
 
-def run_simulations_for_condition(file_path, ids, subids, k_wrap, binding_sites, t_points,
-                                  k_unbind, k_bind, p_conc, cooperativity, inf_protamine, max_nucs=100):
+def create_nucleosomes_instance(nuc, k_wrap, binding_sites):
+    """Factory function to create Nucleosomes instance (replaces lambda)"""
+    #### Create a deep copy of the nucleosome to ensure each replicate has its own independent instance
+    nuc_copy = copy.deepcopy(nuc)
+    return Nucleosomes(k_wrap=k_wrap,
+                      nucleosomes=[nuc_copy],
+                      binding_sites=binding_sites)
+
+def create_protamines_instance(prot_params):
+    """Factory function to create protamines instance (replaces lambda)"""
+    return protamines(**prot_params)
+
+
+def run_simulations_for_condition(file_path, ids, subids, 
+                                  k_wrap, binding_sites, tau_points,
+                                  prot_params, inf_protamine, replicates, max_nucs=100):
     """
     Run Gillespie simulations in parallel for nucleosomes generated from a given file,
     ids and subids. Returns a list of (times, cs_array) tuples.
@@ -67,17 +104,23 @@ def run_simulations_for_condition(file_path, ids, subids, k_wrap, binding_sites,
     gen = itertools.islice(gen, start_idx, start_idx + max_nucs)
 
 
-    tau_min = _compute_tau_min(k_wrap=k_wrap, ends=2, gamma=5.0)
-    print(f"Computed tau_min: {tau_min:.4f} for k_wrap: {k_wrap}")
+    # tau_min = _compute_tau_min(k_wrap=k_wrap, ends=2, gamma=5.0)
+    # print(f"Computed tau_min: {tau_min:.4f} for k_wrap: {k_wrap}")
     # import sys
     # sys.exit(0)
+    tau_min = None
 
-    
+
+    build_params = dict(nucs_factory=partial(create_nucleosomes_instance, k_wrap=k_wrap, binding_sites=binding_sites),
+                        prot_factory=partial(create_protamines_instance, prot_params=prot_params)
+                    )
+
+
     results = []
     # Use a process pool to run individual simulation tasks in parallel.
     with concurrent.futures.ProcessPoolExecutor(max_workers=20) as executor:
-        futures = [executor.submit(simulate_single, nuc, k_wrap, binding_sites, t_points,
-                                   k_unbind, k_bind, p_conc, cooperativity, inf_protamine, tau_min)
+        futures = [executor.submit(simulate_single, nuc, k_wrap, binding_sites, tau_points, build_params,
+                                                    inf_protamine=inf_protamine, R=replicates, tau_min=tau_min)
                    for nuc in gen]
         for fut in concurrent.futures.as_completed(futures):
             try:
@@ -229,34 +272,44 @@ def no_protamine_analysis(save_path=None):
 
 
     # Simulation parameters
-    lambda_ = 1
     c_0 = 89.7 # uM
-    k_wrap = lambda_ * 1.0
+    k_wrap = 1.0
     binding_sites = 14
-    k_unbind = lambda_ * c_0
-    k_bind = lambda_ * 1.0
+    k_unbind = c_0
+    k_bind = 1.0
     inf_protamine = True
-    t_max = 10000.0
-    t_steps = 10000
-    t_points = np.linspace(0, t_max, t_steps)
+    tau_max = 10000.0
+    tau_steps = 10000
+    tau_points = np.linspace(0, tau_max, tau_steps)
     subids_range = None
     max_nucs = 10
     p_conc = 0.0
     cooperativity = 0.0
 
+    prot_params = {
+    'k_unbind': k_unbind,
+    'k_bind': k_bind,
+    'p_conc': p_conc,
+    'cooperativity': cooperativity
+    }
+
 
     results_bound = run_simulations_for_condition(
             file_path_bound, ids_bound, subids=subids_range,
-            k_wrap=k_wrap, binding_sites=binding_sites, t_points=t_points,
-            k_unbind=k_unbind, k_bind=k_bind, p_conc=p_conc, cooperativity=cooperativity,
-            inf_protamine=inf_protamine, max_nucs=max_nucs
+            k_wrap=k_wrap, binding_sites=binding_sites, tau_points=tau_points,
+            prot_params=prot_params,
+            inf_protamine=inf_protamine,
+            max_nucs=max_nucs,
+            replicates=10
         )
 
     results_unbound = run_simulations_for_condition(
             file_path_unbound, ids_unbound, subids=subids_range,
-            k_wrap=k_wrap, binding_sites=binding_sites, t_points=t_points,
-            k_unbind=k_unbind, k_bind=k_bind, p_conc=p_conc, cooperativity=cooperativity,
-            inf_protamine=inf_protamine, max_nucs=max_nucs
+            k_wrap=k_wrap, binding_sites=binding_sites, tau_points=tau_points,
+            prot_params=prot_params,
+            inf_protamine=inf_protamine,
+            max_nucs=max_nucs,
+            replicates=10
         )
 
 
@@ -270,7 +323,7 @@ def no_protamine_analysis(save_path=None):
     avg_cs_unbound = np.mean(np.vstack([res[1] for res in results_unbound]), axis=0)
 
     vr = {
-        'times': t_points,
+        'times': tau_points,
         'avg_cs_bound': avg_cs_bound,
         'avg_cs_unbound': avg_cs_unbound,
         'p_conc': p_conc,
@@ -344,7 +397,7 @@ def no_protamine_analysis(save_path=None):
 
 
 
-no_protamine_analysis(save_path=None)
+# no_protamine_analysis(save_path=None)
 # no_protamine_analysis(save_path=thesis_dir / "Chapter_HistProt" / "SSA")
 
 
@@ -371,34 +424,39 @@ def with_protamine_analysis(save_path=None):
 
 
     # Simulation parameters
-    lambda_ = 1
     c_0 = 89.7 # uM
-    k_wrap = lambda_ * 1.0
+    k_wrap = 1.0
     binding_sites = 14
-    k_unbind = lambda_ * c_0
-    k_bind = lambda_ * 1.0
+    k_unbind =  c_0
+    k_bind = 1.0
     inf_protamine = True
-    t_max = 10000.0
-    t_steps = 10000
-    t_points = np.linspace(0, t_max, t_steps)
+    tau_max = 10000.0
+    tau_steps = 100
+    tau_points = np.linspace(0, tau_max, tau_steps)
     subids_range = None
     max_nucs = 10
-    p_conc = 10.0
+    p_conc = 1000.0
     cooperativity = 4.5
 
+    prot_params = {
+    'k_unbind': k_unbind,
+    'k_bind': k_bind,
+    'p_conc': p_conc,
+    'cooperativity': cooperativity
+    }
 
     results_bound = run_simulations_for_condition(
             file_path_bound, ids_bound, subids=subids_range,
-            k_wrap=k_wrap, binding_sites=binding_sites, t_points=t_points,
-            k_unbind=k_unbind, k_bind=k_bind, p_conc=p_conc, cooperativity=cooperativity,
-            inf_protamine=inf_protamine, max_nucs=max_nucs
+            k_wrap=k_wrap, binding_sites=binding_sites, tau_points=tau_points,
+            prot_params=prot_params,
+            inf_protamine=inf_protamine, max_nucs=max_nucs, replicates=10
         )
 
     results_unbound = run_simulations_for_condition(
             file_path_unbound, ids_unbound, subids=subids_range,
-            k_wrap=k_wrap, binding_sites=binding_sites, t_points=t_points,
-            k_unbind=k_unbind, k_bind=k_bind, p_conc=p_conc, cooperativity=cooperativity,
-            inf_protamine=inf_protamine, max_nucs=max_nucs
+            k_wrap=k_wrap, binding_sites=binding_sites, tau_points=tau_points,
+            prot_params=prot_params,
+            inf_protamine=inf_protamine, max_nucs=max_nucs, replicates=10
         )
 
 
@@ -412,7 +470,7 @@ def with_protamine_analysis(save_path=None):
     avg_cs_unbound = np.mean(np.vstack([res[1] for res in results_unbound]), axis=0)
 
     vr = {
-        'times': t_points,
+        'times': tau_points,
         'avg_cs_bound': avg_cs_bound,
         'avg_cs_unbound': avg_cs_unbound,
         'p_conc': p_conc,
