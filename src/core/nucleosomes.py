@@ -141,6 +141,221 @@ class Nucleosome:
 
             return rewrapped_sites
 
+    def compute_tau_slow_per_n(self) -> dict:
+        """
+        Compute local slow timescales tau_slow(n) for this nucleosome
+        using its G_mat, k_wrap, kT, and binding_sites.
+
+        tau_slow(n) ~ 1 / (total rate of wrapping/unwrapping transitions
+        that change the total number of open contacts n).
+
+        This method:
+        1. Maps each valid matrix index (i,j) to total open contacts n
+        2. Computes the slow exit rate from each (i,j) state
+        3. Averages rates over all states with same n, weighted by Boltzmann factors
+        4. Returns tau_slow[n] = 1 / average_rate for each n
+
+        Returns
+        -------
+        tau_slow : dict
+            tau_slow[n] = float (in units of 1/k_wrap, typically seconds)
+            for n = 0 .. binding_sites-1.
+            
+        Notes
+        -----
+        - G_mat[i, j] represents the free energy for a state with:
+          * i left contacts open
+          * (L-1-j) right contacts open
+          * Total n = i + (L-1-j) open contacts
+        - The fully open state (n=L) is not in G_mat (assumed energy 0)
+        - Unwrapping moves: (i,j) -> (i+1,j) [left] or (i,j-1) [right]
+        - Wrapping moves: (i,j) -> (i-1,j) [left] or (i,j+1) [right]
+        """
+        G = self.G_mat
+        L = self.binding_sites
+        k_wrap = self.k_wrap
+        kT = self.kT
+
+        # Collect valid (i,j) indices: upper triangle i <= j
+        states = []
+        for i in range(L):
+            for j in range(L):
+                if i <= j:
+                    states.append((i, j))
+
+        # Map each (i,j) to total open contacts n
+        # n = left_open + right_open = i + (L-1-j)
+        n_values = {}
+        for (i, j) in states:
+            left_open = i
+            right_open = (L - 1) - j
+            n = left_open + right_open
+            n_values[(i, j)] = n
+
+        max_n = L - 1  # fully open (n=L) is not in G_mat
+
+        tau_slow = {}
+
+        for n in range(0, max_n + 1):
+            # All (i,j) states with this total open n
+            ij_at_n = [(i, j) for (i, j) in states if n_values[(i, j)] == n]
+            if not ij_at_n:
+                tau_slow[n] = math.inf
+                continue
+
+            # Boltzmann weights at fixed n
+            energies = np.array([G[i, j] for (i, j) in ij_at_n])
+            weights = np.exp(-energies / kT)
+            Z_n = weights.sum()
+            probs = weights / Z_n
+
+            a_slow_avg = 0.0
+
+            for p, (i, j) in zip(probs, ij_at_n):
+                G_current = G[i, j]
+
+                # Total slow rate out of (i,j)
+                a_lr = 0.0
+
+                # ---- Unwrap left: (i, j) -> (i+1, j) ----
+                new_i = i + 1
+                new_j = j
+                if new_i < L:
+                    if new_i <= new_j:
+                        G_new_l = G[new_i, new_j]
+                    else:
+                        # Stepped outside triangle -> fully open/detached state
+                        G_new_l = 0.0
+                    dG_l = G_new_l - G_current
+                    k_unwrap_left = k_wrap * math.exp(-dG_l / kT)
+                    a_lr += k_unwrap_left
+
+                # ---- Unwrap right: (i, j) -> (i, j-1) ----
+                new_i = i
+                new_j = j - 1
+                if new_j >= 0:
+                    if new_i <= new_j:
+                        G_new_r = G[new_i, new_j]
+                    else:
+                        # new_i > new_j: fully open/detached
+                        G_new_r = 0.0
+                    dG_r = G_new_r - G_current
+                    k_unwrap_right = k_wrap * math.exp(-dG_r / kT)
+                    a_lr += k_unwrap_right
+
+                # ---- Wrap left: (i, j) -> (i-1, j) ----
+                if i > 0:
+                    # Wrapping uses base rate k_wrap
+                    a_lr += k_wrap
+
+                # ---- Wrap right: (i, j) -> (i, j+1) ----
+                right_open = (L - 1) - j
+                if right_open > 0:
+                    # Wrapping reduces right_open by 1 -> j -> j+1
+                    if j + 1 < L:
+                        a_lr += k_wrap
+
+                # Accumulate weighted rate
+                a_slow_avg += p * a_lr
+
+            if a_slow_avg > 0.0:
+                tau_slow[n] = 1.0 / a_slow_avg
+            else:
+                tau_slow[n] = math.inf
+
+        return tau_slow
+
+    def compute_tau_slow_per_ij(self) -> dict:
+        """
+        Compute local slow timescales tau_slow(i,j) for this nucleosome
+        using its G_mat, k_wrap, kT, and binding_sites.
+
+        tau_slow(i,j) ~ 1 / (total rate of wrapping/unwrapping transitions
+        out of state (i,j)).
+
+        Returns
+        -------
+        tau_slow_ij : dict
+            tau_slow_ij[(i,j)] = float (seconds, if k_wrap is in 1/s)
+            for all valid (i,j) with i <= j.
+
+        Notes
+        -----
+        - G_mat[i, j] represents the free energy for a state with:
+        * left_open  = i
+        * right_open = (L-1-j)
+        * total open n = i + (L-1-j)
+        - Fully open (n = L) is treated as energy 0 outside G_mat.
+        - Unwrapping moves:
+            (i,j) -> (i+1,j)  [left]
+            (i,j) -> (i,j-1)  [right]
+        with k_unwrap = k_wrap * exp(-ΔG / kT).
+        - Wrapping moves:
+            (i,j) -> (i-1,j)  [left]
+            (i,j) -> (i,j+1)  [right]
+        with rate k_wrap (constant base rate).
+        """
+        G = self.G_mat
+        L = self.binding_sites
+        k_wrap = self.k_wrap
+        kT = self.kT
+
+        tau_slow_ij = {}
+
+        # Loop over all valid (i,j) in the upper triangle
+        for i in range(L):
+            for j in range(i, L):  # ensure i <= j
+                G_current = G[i, j]
+
+                a_slow = 0.0  # total slow rate out of (i,j)
+
+                # ---- Unwrap left: (i, j) -> (i+1, j) ----
+                new_i = i + 1
+                new_j = j
+                if new_i < L:
+                    if new_i <= new_j:
+                        G_new_l = G[new_i, new_j]
+                    else:
+                        # stepped outside triangle: treat as fully detached (energy 0)
+                        G_new_l = 0.0
+                    dG_l = G_new_l - G_current
+                    k_unwrap_left = k_wrap * math.exp(-dG_l / kT)
+                    a_slow += k_unwrap_left
+
+                # ---- Unwrap right: (i, j) -> (i, j-1) ----
+                new_i = i
+                new_j = j - 1
+                if new_j >= 0:
+                    if new_i <= new_j:
+                        G_new_r = G[new_i, new_j]
+                    else:
+                        # outside triangle: fully detached (energy 0)
+                        G_new_r = 0.0
+                    dG_r = G_new_r - G_current
+                    k_unwrap_right = k_wrap * math.exp(-dG_r / kT)
+                    a_slow += k_unwrap_right
+
+                # ---- Wrap left: (i, j) -> (i-1, j) ----
+                if i > 0:
+                    # Wrapping uses base rate k_wrap
+                    a_slow += k_wrap
+
+                # ---- Wrap right: (i, j) -> (i, j+1) ----
+                right_open = (L - 1) - j
+                if right_open > 0:
+                    # j+1 reduces right_open by 1
+                    if j + 1 < L:
+                        a_slow += k_wrap
+
+                # Convert to timescale
+                if a_slow > 0.0:
+                    tau_slow_ij[(i, j)] = 1.0 / a_slow
+                else:
+                    tau_slow_ij[(i, j)] = math.inf
+
+        return tau_slow_ij
+
+
 class Nucleosomes:
     def __init__(self, 
                  k_wrap: float, 
