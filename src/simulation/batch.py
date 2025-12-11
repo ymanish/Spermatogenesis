@@ -82,6 +82,8 @@ def run_batch_simulations(
         
         # Run replicates
         for r in range(replicates):
+            print(f"Simulating nucleosome {nuc_idx + 1}/{len(batch)}, Replicate {r + 1}/{replicates}: ID={nuc.id}, SubID={nuc.subid}")
+
             final_cs, final_bprot, detach_time = run_single_replicate(
                 nuc, r, build_params, tau_points, inf_protamine, tau_min,
                 save_trajectories, eff_stride, traj_data

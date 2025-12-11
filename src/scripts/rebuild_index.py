@@ -35,20 +35,14 @@ def main():
         help=f"Results directory (default: {RESULTS_DIR})"
     )
     args = parser.parse_args()
-    
-    print("=" * 70)
     print("Rebuilding Simulation Index")
-    print("=" * 70)
     print(f"Scanning: {args.results_dir}")
-    print()
     
     # Create storage without index initially, then rebuild
-    storage = SimulationStorage(base_dir=args.results_dir, use_index=False)
+    storage = SimulationStorage(base_dir=args.results_dir, use_index=True)
     index = storage.rebuild_index()
     
-    print("\n" + "=" * 70)
     print("Index Summary")
-    print("=" * 70)
     print(f"Total parameter sets: {len(index)}")
     print(f"Index file: {storage.index_file}")
     
@@ -61,9 +55,9 @@ def main():
                     print(f"  {col:15s}: {sorted(unique_vals)}")
         
         # Show sample of directories
-        print(f"\nParameter directories found:")
-        for i, hash_dir in enumerate(index['param_hash'].head(5)):
-            print(f"  {hash_dir}")
+        print(f"\nSimulation directories found:")
+        for i, dir_name in enumerate(index['directory'].head(5)):
+            print(f"  {dir_name}")
         if len(index) > 5:
             print(f"  ... and {len(index) - 5} more")
     else:

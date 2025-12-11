@@ -397,7 +397,7 @@ if __name__ == "__main__":
         prot_p_conc=100.0,
         prot_cooperativity=0.0,
         replicates=10,
-        n_workers=20,
+        n_workers=21,
         batch_size=1,
         tau_max=1000.0,
         tau_steps=100,
@@ -410,11 +410,10 @@ if __name__ == "__main__":
         file_bound=DEFAULT_FILE_BOUND,
         file_unbound=DEFAULT_FILE_UNBOUND,
         output_dir=OUTPUT_DIR / "with_protamine",
-        save_plot=OUTPUT_DIR / "with_protamine" / "figures", 
-        max_nucs=20, ##### Number of Nucleosomes simulation to run
-        subids_range=(2000, 2050)
+        save_plot=OUTPUT_DIR / "with_protamine" / "figures",
+        max_nucs=20 ##### Number of Nucleosomes simulation to run
     )
-    
+
     # =========================================================================
     # EXAMPLE 3: Parameter Scan
     # =========================================================================

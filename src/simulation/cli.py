@@ -172,7 +172,8 @@ def main():
         raise ValueError("--storage_dir is required")
     args.storage_dir.mkdir(parents=True, exist_ok=True)
     
-    ###indexing will maintain a csv file which can be problem in the array jobs. Use index=False and then rebuild the index from the rebuild_index method after all jobs are done.
+    ###indexing will maintain a csv file which can be problem in the array jobs. 
+    #### Use index=False and then rebuild the index from the rebuild_index method after all jobs are done.
     storage = SimulationStorage(base_dir=args.storage_dir, use_index=False)
 
     

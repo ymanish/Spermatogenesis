@@ -182,3 +182,65 @@ class SimulationStorage:
             dirs = [d for d in self.base_dir.iterdir() if d.is_dir() and d.name != "temps"]
             return pd.DataFrame({'directory': [d.name for d in dirs]})
         return self.index.copy()
+    
+    def rebuild_index(self) -> pd.DataFrame:
+        """
+        Rebuild the index by scanning all directories in base_dir.
+        
+        Scans all subdirectories in base_dir, reads their parameters.json files,
+        and rebuilds the simulation_index.csv.
+        Run the rebuild_index.py script in the src/scripts directory when needed.
+
+        Why rebuild?
+        --------------
+        Over time, simulations may be added or removed manually, or the index
+        file may become corrupted. Rebuilding ensures the index accurately reflects
+        the current state of the simulation directories. Especially in the cluster where 
+        all the array jobs are writing to the same index file (simulation_index.csv),
+        rebuilding the index after all jobs are done ensures consistency. 
+        This is reason also I use index=False when writing the data during the simulations.
+
+        Returns:
+            DataFrame with rebuilt index
+            
+        Raises:
+            ValueError: If index is not enabled
+        """
+        if not self.use_index:
+            raise ValueError("Index not enabled. Set use_index=True in __init__")
+        
+        print(f"Scanning directories in: {self.base_dir}")
+        
+        self.index = pd.DataFrame(columns=self.index.columns)
+        # Scan all subdirectories
+        scanned = 0
+        indexed = 0
+        
+        for sim_dir in self.base_dir.iterdir():
+            if not sim_dir.is_dir():
+                continue
+            if sim_dir.name in ['temps', '.git', '__pycache__']:  # Skip special directories
+                continue
+            
+            scanned += 1
+            params_file = sim_dir / "parameters.json"
+            
+            if params_file.exists():
+                try:
+                    with open(params_file, 'r') as f:
+                        params = json.load(f)
+                    ## Update index
+                    self._update_index(params, sim_dir.name)
+                    indexed += 1
+                except Exception as e:
+                    print(f"Warning: Could not read parameters from {sim_dir.name}: {e}")
+            else:
+                print(f"Warning: No parameters.json found in {sim_dir.name}")
+
+        print(f"\nScanned {scanned} directories, indexed {indexed} simulations")
+
+        # Save index
+        self.index.to_csv(self.index_file, index=False)
+        print(f"✓ Index saved to: {self.index_file}")
+        
+        return self.index

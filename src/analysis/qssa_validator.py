@@ -38,16 +38,11 @@ class QSSAValidationResult:
     nuc_id: str
     subid: int
     tau_prot: float  # Protamine fast timescale (seconds)
-    # Slow timescales per (i,j) state:
-    tau_slow: Dict[Tuple[int, int], float]
-    # Timescale ratios epsilon(i,j) = tau_prot / tau_slow(i,j)
-    epsilons: Dict[Tuple[int, int], float]
-    eps_max: float      # Maximum epsilon across all (i,j)
-    qssa_valid: bool    # True if eps_max <= threshold (global for nucleosome)
-    threshold: float    # Threshold used for validation
-    # Local QSSA validity per state:
-    qssa_valid_per_ij: Dict[Tuple[int, int], bool]  # True if epsilon(i,j) <= threshold
-
+    tau_slow: Dict[int, float]  # Nucleosome slow timescales per n
+    epsilons: Dict[int, float]  # Timescale ratios epsilon(n) = tau_prot / tau_slow(n)
+    eps_max: float  # Maximum epsilon across all n
+    qssa_valid: bool  # True if eps_max <= threshold
+    threshold: float  # Threshold used for validation
 
 
 @dataclass
@@ -95,7 +90,7 @@ def compute_protamine_fast_timescale(
         - k_off_max = k_unbind * exp(-2*beta*J) for J > 0
     """
     k_on = prot.k_bind * prot.P_free
-    print("kon", k_on)
+    
     # Maximum unbinding rate (both neighbors bound)
     J = prot.cooperativity
     k_off_max = prot.k_unbind * math.exp(-2.0 * beta * abs(J))
@@ -117,61 +112,50 @@ def validate_qssa_for_nucleosome(
     threshold: float = 0.1
 ) -> QSSAValidationResult:
     """
-    Validate QSSA for a single nucleosome using per-(i,j) timescales.
-
-    For each state (i,j) in the triangular G-matrix, we compute the total
-    slow rate a_slow(i,j) (wrap + unwrap) and the corresponding slow
-    timescale:
-
-        tau_slow(i,j) = 1 / a_slow(i,j)   (seconds)
-
-    Then:
-
-        epsilon(i,j) = tau_prot / tau_slow(i,j)
-
-    QSSA is considered valid if max_{(i,j)} epsilon(i,j) <= threshold.
-
+    Validate QSSA for a single nucleosome.
+    
+    Computes epsilon(n) = tau_prot / tau_slow(n) for each level n.
+    QSSA is valid if max(epsilon(n)) <= threshold.
+    
     Args:
         nuc: Nucleosome instance
         tau_prot: Protamine fast timescale (from compute_protamine_fast_timescale)
         threshold: QSSA validity threshold (default 0.1)
-
+        
     Returns:
         QSSAValidationResult with validation details
-    """
-    # Compute nucleosome slow timescales per (i,j)
-    tau_slow_ij = nuc.compute_tau_slow_per_ij()
-
-    # Compute epsilon(i,j) for each state
-    epsilons: Dict[Tuple[int, int], float] = {}
-    qssa_valid_per_ij: Dict[Tuple[int, int], bool] = {}
-    
-    for ij, ts in tau_slow_ij.items():
-        if math.isfinite(ts) and ts > 0.0:
-            epsilons[ij] = tau_prot / ts
-        else:
-            # If tau_slow is infinite or zero, epsilon ~ 0 (protamines effectively infinitely faster)
-            epsilons[ij] = 0.0
         
-        # Local QSSA validity for this state
-        qssa_valid_per_ij[ij] = (epsilons[ij] <= threshold)
-
-    # Maximum epsilon across all (i,j)
+    Notes:
+        - Typical threshold is 0.1 (timescale separation of 10x)
+        - If eps_max > threshold, full protamine-resolved simulation needed
+        - If eps_max <= threshold, can use effective nucleosome-only model
+    """
+    # Compute nucleosome slow timescales
+    tau_slow = nuc.compute_tau_slow_per_n()
+    
+    # Compute epsilon for each n
+    epsilons = {}
+    for n, ts in tau_slow.items():
+        if math.isfinite(ts) and ts > 0:
+            epsilons[n] = tau_prot / ts
+        else:
+            epsilons[n] = 0.0  # If tau_slow is infinite, epsilon is 0
+    
+    # Maximum epsilon
     eps_max = max(epsilons.values()) if epsilons else 0.0
-
-    # Global QSSA valid if all relevant (i,j) satisfy epsilon(i,j) <= threshold
+    
+    # QSSA valid if eps_max <= threshold
     qssa_valid = (eps_max <= threshold)
-
+    
     return QSSAValidationResult(
         nuc_id=nuc.id,
         subid=nuc.subid,
         tau_prot=tau_prot,
-        tau_slow=tau_slow_ij,
+        tau_slow=tau_slow,
         epsilons=epsilons,
         eps_max=eps_max,
         qssa_valid=qssa_valid,
-        threshold=threshold,
-        qssa_valid_per_ij=qssa_valid_per_ij
+        threshold=threshold
     )
 
 
@@ -270,31 +254,15 @@ def print_qssa_summary(result: SystemQSSAResult, verbose: bool = False):
         
         for nuc_result in result.nucleosome_results:
             status = "✓ VALID" if nuc_result.qssa_valid else "✗ INVALID"
-            
-            # Count how many states failed
-            num_states = len(nuc_result.qssa_valid_per_ij)
-            num_failed = sum(1 for valid in nuc_result.qssa_valid_per_ij.values() if not valid)
-            num_passed = num_states - num_failed
-            
             print(f"\nNucleosome {nuc_result.nuc_id} (subid={nuc_result.subid}): {status}")
             print(f"  eps_max = {nuc_result.eps_max:.4f}")
-            print(f"  States: {num_passed}/{num_states} passed, {num_failed}/{num_states} failed")
             
-            if nuc_result.eps_max > 0.05:  # Show problematic states
-                print(f"  Problematic states (i,j) with epsilon > {nuc_result.threshold}:")
-                count = 0
-                for ij, eps in nuc_result.epsilons.items():
-                    if not nuc_result.qssa_valid_per_ij[ij]:
-                        ts = nuc_result.tau_slow[ij]
-                        i, j = ij
-                        # Calculate n_open for reference
-                        L = 14  # Assuming binding_sites = 14
-                        n_open = i + (L - 1 - j)
-                        print(f"    (i={i:2d}, j={j:2d}, n_open={n_open:2d}): epsilon={eps:.4f}, tau_slow={ts:.6e}")
-                        count += 1
-                        if count >= 10 and num_failed > 10:
-                            print(f"    ... and {num_failed - 10} more failed states (see TSV for full list)")
-                            break
+            if nuc_result.eps_max > 0.05:  # Show problematic levels
+                print(f"  Problematic levels (epsilon > 0.05):")
+                for n, eps in nuc_result.epsilons.items():
+                    if eps > 0.05:
+                        ts = nuc_result.tau_slow[n]
+                        print(f"    n={n}: epsilon={eps:.4f}, tau_slow={ts:.6e}")
     
     print("=" * 80)
 
@@ -346,18 +314,11 @@ def generate_qssa_report(
                 f.write(f"Status: {'VALID' if nuc_result.qssa_valid else 'INVALID'}\n")
                 f.write(f"Maximum epsilon: {nuc_result.eps_max:.6f}\n")
                 
-                f.write("\nTimescale ratios by state (i,j):\n")
-                f.write(f"  {'(i,j)':<12} {'n_open':<8} {'epsilon':<12} {'tau_slow (s)':<15}\n")
-                f.write(f"  {'-'*12} {'-'*8} {'-'*12} {'-'*15}\n")
-                
-                # Sort by (i,j) tuples
-                L = 14  # Assuming binding_sites = 14
-                for ij in sorted(nuc_result.epsilons.keys()):
-                    eps = nuc_result.epsilons[ij]
-                    ts = nuc_result.tau_slow[ij]
-                    i, j = ij
-                    n_open = i + (L - 1 - j)
-                    f.write(f"  ({i:2d},{j:2d}){' '*6} {n_open:<8d} {eps:<12.6f} {ts:<15.6e}\n")
+                f.write("\nTimescale ratios by level (n = total open contacts):\n")
+                for n in sorted(nuc_result.epsilons.keys()):
+                    eps = nuc_result.epsilons[n]
+                    ts = nuc_result.tau_slow[n]
+                    f.write(f"  n={n:2d}: epsilon={eps:.6f}, tau_slow={ts:.6e} s\n")
                 f.write("\n" + "-" * 80 + "\n\n")
     
     print(f"✓ QSSA report saved to {output_path}")
@@ -370,41 +331,20 @@ def save_qssa_data(result: SystemQSSAResult, output_path: Path):
     Args:
         result: SystemQSSAResult from validate_qssa_for_system
         output_path: Path to save TSV file
-    
-    TSV Columns:
-        - nuc_id: Nucleosome ID
-        - subid: Nucleosome sub-ID
-        - i, j: State indices
-        - n_open: Total open contacts
-        - tau_prot: Protamine fast timescale
-        - tau_slow: Nucleosome slow timescale for this state
-        - epsilon: Timescale ratio (tau_prot / tau_slow)
-        - threshold: QSSA threshold used
-        - qssa_valid_local: Whether this (i,j) state satisfies QSSA
-        - qssa_valid_global: Whether the entire nucleosome satisfies QSSA
     """
     import pandas as pd
     
     records = []
     for nuc_result in result.nucleosome_results:
-        # assume all nucleosomes have same binding_sites; or pass it in explicitly
-        L = 14  # or nuc.binding_sites if you store it
-        for (i, j), eps in nuc_result.epsilons.items():
-            ts = nuc_result.tau_slow[(i, j)]
-            qssa_local = nuc_result.qssa_valid_per_ij[(i, j)]
-            n_open = i + (L - 1 - j)
+        for n in sorted(nuc_result.epsilons.keys()):
             records.append({
                 'nuc_id': nuc_result.nuc_id,
                 'subid': nuc_result.subid,
-                'i': i,
-                'j': j,
-                'n_open': n_open,
+                'n_open': n,
                 'tau_prot': nuc_result.tau_prot,
-                'tau_slow': ts,
-                'epsilon': eps,
-                'threshold': nuc_result.threshold,
-                'qssa_valid_local': qssa_local,
-                'qssa_valid_global': nuc_result.qssa_valid
+                'tau_slow': nuc_result.tau_slow[n],
+                'epsilon': nuc_result.epsilons[n],
+                'qssa_valid': nuc_result.qssa_valid
             })
     
     df = pd.DataFrame(records)

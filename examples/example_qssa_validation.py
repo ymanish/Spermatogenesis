@@ -227,7 +227,7 @@ if __name__ == "__main__":
         file_path=file_path,
         k_wrap=1.0,
         prot_params=prot_params,
-        max_nucs=2,
+        max_nucs=10,
         qssa_threshold=0.1,
         output_dir=Path(RESULTS_DIR / "qssa_validation")
     )

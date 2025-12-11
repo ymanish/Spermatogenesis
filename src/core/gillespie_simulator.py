@@ -302,8 +302,19 @@ class GillespieSimulator():
             rates:List[Rates] = [self.calculate_rates(idx) for idx in range(self.num_nuc)]
             total_rate = sum(sum(r.total.values()) for r in rates)
 
-            # logger.info(f'Rates at step {n}: {rates}')
-            # logger.info(f'Total rate at step {n}: {total_rate}')
+            # # Print rates in a more human‑readable format
+            # print(f"\n=== Step {i_record} ===")
+            # print(f"Total rate: {total_rate:.6g}")
+            # for ni, r in enumerate(rates):
+            #     nuc_total = sum(r.total.values())
+            #     print(f"  Nucleosome {ni}: total={nuc_total:.6g}")
+            #     for rt, tot in r.total.items():
+            #         if tot <= 0:
+            #             continue
+            #         print(f"    {rt.name}: total={tot:.6g}")
+            #         site_rates = r.persite.get(rt, {})
+            #         for site, val in sorted(site_rates.items()):
+            #             print(f"      site {site}: {val:.6g}")
 
             if total_rate <= 0:
                 print(f'No reactions possible, exiting simulation : total_rate = {total_rate}')
@@ -337,9 +348,11 @@ class GillespieSimulator():
                 i_record += 1
             
             if i_record >= num_points:
+                ### If you care about the internal state after the last grid time (you only ever use the recorded trajectory),
+                ###  you could perform the step A to B before breaking. 
                 break
 
-            #### Advance to event time in tau and convert to seconds for output
+            #### Advance to event time in tau and convert to seconds for output. STEP A
             self.tau = tau_event
             self.t   = self.tau / self.k_wrap
             ### Choose reaction
@@ -353,7 +366,7 @@ class GillespieSimulator():
             #### Update the species count
             self._update_species_count(reaction_choice)
 
-            self._update_detachment_flags()
+            self._update_detachment_flags() ### Step B
 
             # ###>>>>>>>>>>>>>>>>>>>>>NEW PART<<<<<<<<<<<<<<<<<<<<<<<<<
             # # Check if nucleosome is detached
