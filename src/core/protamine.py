@@ -114,6 +114,9 @@ class protamines:
 
 
 if __name__ == "__main__":
+
+    import time
+    start_time = time.time()
     # Example usage
     prot = protamines(k_unbind=234.0, k_bind=123.0, p_conc=2.0, cooperativity=1)
     open_sites = [0, 2]
@@ -129,6 +132,8 @@ if __name__ == "__main__":
     # print("Sum Unbinding Rate:", sum_unbind_rate)
 
 
-    unbind_rates, sum_unbind_rate = prot.protein_unbinding_coop(nuce=nuce, pt_indexes=bound_sites)
-    print("Cooperative Unbinding Rates:", unbind_rates)
-    print("Sum Cooperative Unbinding Rate:", sum_unbind_rate)
+    # unbind_rates, sum_unbind_rate = prot.protein_unbinding_coop(nuce=nuce, pt_indexes=bound_sites)
+    # print("Cooperative Unbinding Rates:", unbind_rates)
+    # print("Sum Cooperative Unbinding Rate:", sum_unbind_rate)
+    end_time = time.time()
+    print("Execution Time:", end_time - start_time, "seconds")

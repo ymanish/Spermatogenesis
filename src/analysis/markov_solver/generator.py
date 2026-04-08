@@ -70,8 +70,13 @@ def build_full_Q_from_nucleosome(
     N = binding_sites if binding_sites is not None else nucleosome.binding_sites
 
     # Protamine parameters in beta units
-    betamu = np.log(protamine_params['p_conc'] * protamine_params['k_bind'] / protamine_params['k_unbind'])
-    betaJ = protamine_params['cooperativity'] / kT_val
+    if protamine_params['p_conc'] <= 0.0:
+        # print("  Protamine concentration <= 0. Setting betamu = -inf (no protamines).")
+        betamu = -np.inf
+        betaJ = 0.0
+    else:
+        betamu = np.log(protamine_params['p_conc'] * protamine_params['k_bind'] / protamine_params['k_unbind'])
+        betaJ = protamine_params['cooperativity'] / kT_val
 
     # 1. Enumerate transient states: l + r < N
     states: List[Tuple[int, int]] = []
@@ -121,6 +126,7 @@ def build_full_Q_from_nucleosome(
             l2, r2 = l - 1, r
             p_free_left = p_free(l, betamu, betaJ)
             rate = k_close_bare * p_free_left
+            # rate = max(rate, 1e-300)
             if rate > 0.0:
                 i = state_index[(l2, r2)]
                 Q_full[i, j] += rate
@@ -131,6 +137,7 @@ def build_full_Q_from_nucleosome(
             l2, r2 = l, r - 1
             p_free_right = p_free(r, betamu, betaJ)
             rate = k_close_bare * p_free_right
+            # rate = max(rate, 1e-300)
             if rate > 0.0:
                 i = state_index[(l2, r2)]
                 Q_full[i, j] += rate
@@ -142,6 +149,7 @@ def build_full_Q_from_nucleosome(
             F_new = F_nuc(lL, rL)
             dF = F_new - F_curr
             rate = k_close_bare * np.exp(-dF / kT_val)
+            # rate = max(rate, 1e-300)
             if rate > 0.0:
                 i = state_index[(lL, rL)]
                 Q_full[i, j] += rate
@@ -150,6 +158,7 @@ def build_full_Q_from_nucleosome(
             F_new = 0.0
             dF = F_new - F_curr
             rate = k_close_bare * np.exp(-dF / kT_val)
+            # rate = max(rate, 1e-300)
             if rate > 0.0:
                 Q_full[abs_index, j] += rate
                 total_out += rate
@@ -160,14 +169,17 @@ def build_full_Q_from_nucleosome(
             F_new = F_nuc(lR, rR)
             dF = F_new - F_curr
             rate = k_close_bare * np.exp(-dF / kT_val)
+            # rate = max(rate, 1e-300)
             if rate > 0.0:
                 i = state_index[(lR, rR)]
                 Q_full[i, j] += rate
                 total_out += rate
+
         elif lR + rR >= N:
             F_new = 0.0
             dF = F_new - F_curr
             rate = k_close_bare * np.exp(-dF / kT_val)
+            # rate = max(rate, 1e-300)
             if rate > 0.0:
                 Q_full[abs_index, j] += rate
                 total_out += rate
@@ -179,14 +191,15 @@ def build_full_Q_from_nucleosome(
     if use_sparse:
         Q_full = Q_full.tocsr()
 
-    # 7. Extract blocks
+    scale = 1.0
+    if dimensionless:
+        scale = 1.0 / k_close_bare   # <-- use the actual k used in rates
+
+    # Apply scaling once
+    Q_full = Q_full * scale
+
+    # Re-slice AFTER scaling (so Q_TT/Q_AT are consistent and not double-scaled)
     Q_TT = Q_full[0:M, 0:M]
     Q_AT = Q_full[abs_index:abs_index+1, 0:M]
-
-    if dimensionless:
-        Q_full *= (1/k_wrap)
-        Q_TT *= (1/k_wrap)
-        Q_AT *= (1/k_wrap)
-        return Q_full, Q_TT, Q_AT, states, state_index, abs_index
 
     return Q_full, Q_TT, Q_AT, states, state_index, abs_index

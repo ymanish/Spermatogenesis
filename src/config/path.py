@@ -48,3 +48,4 @@ BREATHING_DIR = RESULTS_DIR / "Breathing_plots"
 SIMULATION_PLOTS_DIR = RESULTS_DIR / "simulation_plots"
 NUCLEOSOME_STATE_RECORD_DIR = RESULTS_DIR / "Derivate_state_record"
 
+CLUSTER_OUTPUT_DIR = Path("/home/pol_schiessel/maya620d/pol/Projects/Codebase/Spermatogensis/cluster_output")

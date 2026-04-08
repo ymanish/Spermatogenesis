@@ -385,7 +385,7 @@ def __factor_and_marginal(M_rearr, NC, new_method=False):
 
     return (lu, piv), M_RM, M_Mp, M_R
 
-@profile
+# @profile
 def binding_model_free_energy(
     free_gs: np.ndarray,
     free_M: np.ndarray,    

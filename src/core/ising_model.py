@@ -90,6 +90,10 @@ def p_free(n: int, beta_mu: float, beta_J: float) -> float:
 
     For n <= 0, returns 0.0 (no open sites -> no boundary site).
     """
+    if beta_mu == -np.inf:
+        # print("  beta_mu = -inf -> no ligands bound.")
+        return 1.0  # No ligands bound -> boundary site always free
+
     if n <= 0:
         return 0.0
 

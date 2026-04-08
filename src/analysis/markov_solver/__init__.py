@@ -26,6 +26,11 @@ from .mfpt import (compute_mfpt_from_Q_TT)
 from .survival import compute_survival
 from .nucleosome_utils import load_nucleosomes_from_file
 from .projection import (project_to_open_sites, compute_open_sites_evolution)
+from .drift_reversal import (
+    DriftReversalAnalyzer,
+    DriftReversalResults,
+    compare_to_ssa
+)
 
 __all__ = [
     'solve_Q_TT_complete',
@@ -36,4 +41,7 @@ __all__ = [
     'load_nucleosomes_from_file',
     'project_to_open_sites',
     'compute_open_sites_evolution',
+    'DriftReversalAnalyzer',
+    'DriftReversalResults',
+    'compare_to_ssa',
 ]

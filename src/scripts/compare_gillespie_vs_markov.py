@@ -81,6 +81,7 @@ class ComparisonConfig:
         # Time grid (dimensionless τ = k_wrap × t_physical)
         tau_max: float = 5000.0,
         tau_steps: int = 200, ##n_steps 
+        method: str = "ode",  # Markov solver method options: "expm", "ode"
         
         # Output
         output_dir: Path = RESULTS_DIR / "gillespie_vs_markov",
@@ -97,6 +98,7 @@ class ComparisonConfig:
         self.replicates = replicates
         self.n_workers = n_workers
         self.batch_size = batch_size
+        self.method = method
         
         self.tau_max = tau_max
         self.tau_steps = tau_steps
@@ -361,9 +363,8 @@ def compute_markov_survival(
             sparse=False, 
             dimensionless=True
         )
-        
         print(f"    State space: {len(states)} transient states")
-        
+
         # Compute survival function
         start_state = (0, 0)  # Fully wrapped
         S = compute_survival(
@@ -371,7 +372,7 @@ def compute_markov_survival(
             state_index,
             start_state,
             t_grid,  # τ-grid, so we evaluate exp(Q_TT * τ)
-            method='expm'  
+            method=config.method  
         )
         
         # Compute MFPT
@@ -721,17 +722,18 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------
     
     config = ComparisonConfig(
-        file_path=HAMNUCRET_DATA_DIR / "exactpoint_unboundpromoter_regions_breath/breath_energy/001.tsv",
+        file_path=HAMNUCRET_DATA_DIR / "exactpoint_boundpromoter_regions_breath/breath_energy/001.tsv",
         max_nucs=20,
         prot_k_bind=1.0,
         prot_k_unbind=89.7,
-        k_wrap=0.1,
-        prot_p_conc=10.0,
+        k_wrap=1.0,
+        prot_p_conc=0.0,
         prot_cooperativity=0.0,
         replicates=50,
         n_workers=20,
-        tau_max=1000.0,
+        tau_max=10000.0,
         tau_steps=800,
+        method="ode",
         output_dir=RESULTS_DIR / "gillespie_vs_markov" / "with_protamine_kwrap1"
     )
     

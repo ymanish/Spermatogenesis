@@ -34,13 +34,20 @@ def compute_mfpt_from_Q_TT(
     """
     M = Q_TT.shape[0]
     ones = np.ones(M)
+
+    condA = np.linalg.cond(Q_TT.T)
+    if condA > 1e12:
+        print("MFPT numerically ill-defined (effectively infinite).")
+        mfpt = np.inf
+        tau_vec = np.full(M, np.inf)
+    else:
+        tau_vec = np.linalg.solve(Q_TT.T, -ones)
+        # Extract MFPT for start_state
+        start_idx = state_index[start_state]
+        mfpt = float(tau_vec[start_idx])
     
-    # Solve Q_TT.T @ tau = -1
-    tau_vec = np.linalg.solve(Q_TT.T, -ones)
-    
-    # Extract MFPT for start_state
-    start_idx = state_index[start_state]
-    mfpt = float(tau_vec[start_idx])
-    
+    # # Solve Q_TT.T @ tau = -1
+    # tau_vec = np.linalg.solve(Q_TT.T, -ones)
+
     return mfpt, tau_vec
 

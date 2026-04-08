@@ -41,18 +41,12 @@ def main():
     # ========================================================================
     print("\n[1] Loading nucleosome data...")
     
-    k_wrap = 100.0  # Wrapping rate in 1/s
     protamine_params = {
         'k_bind': 1.0,          # Binding rate (1/(μM·s))
         'k_unbind': 89.7,       # Unbinding rate (1/s)
-        'p_conc': 100.0,       # Protamine concentration (μM)
-        'cooperativity': 4.5    # Cooperativity parameter J (kT)
+        'p_conc': 10.0,       # Protamine concentration (μM)
+        'cooperativity': 0.0    # Cooperativity parameter J (kT)
     }
-
-        
-    tau_max = 10000.0  # Dimensionless time τ = k_wrap * t_phys
-    n_points = 500
-    tau_grid = np.linspace(0, tau_max, n_points)
     
     # Compute dimensionless parameters
     mu_tilde = protamine_params['p_conc'] * protamine_params['k_bind'] / protamine_params['k_unbind']
@@ -69,13 +63,13 @@ def main():
     print(f"     β*J         = {beta_J:.3f}")
     
     # Load nucleosomes
-    file_path = HAMNUCRET_DATA_DIR / "exactpoint_boundpromoter_regions_breath/breath_energy/001.tsv"
+    file_path = HAMNUCRET_DATA_DIR / "exactpoint_unboundpromoter_regions_breath/breath_energy/001.tsv"
     print(f"\n   Loading from: {file_path}")
     
     nucs = load_nucleosomes_from_file(
         file_path, 
-        k_wrap=k_wrap, 
-        max_nucs=20,
+        k_wrap=1.0, 
+        max_nucs=5,
     )
     
     print(f"   ✓ Loaded {len(nucs)} nucleosomes")
@@ -108,13 +102,13 @@ def main():
     
     Q_full, Q_TT, Q_AT, states, state_index, abs_index = build_full_Q_from_nucleosome(
         nuc,
-        k_wrap=k_wrap,
+        k_wrap=1.0,
         protamine_params=protamine_params,
+        kT=1.0,
         binding_sites=N_MAX,
-        sparse=False, 
-        dimensionless=True
+        sparse=False
     )
-
+    
     print(f"   ✓ Q_full shape   : {Q_full.shape}")
     print(f"   ✓ Q_TT shape     : {Q_TT.shape}")
     print(f"   ✓ Q_AT shape     : {Q_AT.shape}")
@@ -154,36 +148,34 @@ def main():
     print(f"   ✓ MFPT (physical time) : {mfpt / nuc.k_wrap:.4f} seconds")
     print(f"   ✓ MFPT vector shape    : {tau_vec.shape}")
     print(f"   ✓ MFPT range: [{tau_vec.min():.2f}, {tau_vec.max():.2f}]")
-
-    # raise SystemExit
     
     # ========================================================================
     # TEST 4: Compute survival function (matrix exponential)
     # ========================================================================
     print("\n[5] Computing survival function (matrix exponential method)...")
-
-
-    print(f"   Time grid: {n_points} points from 0 to {tau_max} (dimensionless τ)")
-    print(f"   → Physical time: 0 to {tau_max/nuc.k_wrap:.4f} seconds")
-
+    
+    t_max = 10000.0  # Dimensionless time
+    n_points = 500
+    t_grid = np.linspace(0, t_max, n_points)
+    
     S_expm = compute_survival(
         Q_TT, 
         state_index, 
         start_state, 
-        tau_grid, 
+        t_grid, 
         method='expm'
     )
-
-    print(f"   ✓ Time grid: {n_points} points from 0 to {tau_max} (dimensionless τ)")
+    
+    print(f"   ✓ Time grid: {n_points} points from 0 to {t_max}")
     print(f"   ✓ S(t=0)     = {S_expm[0]:.6f} (should be 1.0)")
-    print(f"   ✓ S(t=tau_max) = {S_expm[-1]:.6e}")
-
+    print(f"   ✓ S(t=t_max) = {S_expm[-1]:.6e}")
+    
     # Find half-life
     idx_half = np.argmin(np.abs(S_expm - 0.5))
-    tau_half = tau_grid[idx_half]
-    print(f"   ✓ Half-life (S=0.5): τ ≈ {tau_half:.2f} (dimensionless)")
-    print(f"                        t ≈ {tau_half/nuc.k_wrap:.4f} seconds")
-
+    t_half = t_grid[idx_half]
+    print(f"   ✓ Half-life (S=0.5): t ≈ {t_half:.2f} (dimensionless)")
+    print(f"                        t ≈ {t_half/nuc.k_wrap:.4f} seconds")
+    
     # ========================================================================
     # TEST 5: Compute survival function (ODE method)
     # ========================================================================
@@ -193,13 +185,13 @@ def main():
         Q_TT, 
         state_index, 
         start_state, 
-        tau_grid, 
+        t_grid, 
         method='ode'
     )
     
     print(f"   ✓ S(t=0)     = {S_ode[0]:.6f}")
-    print(f"   ✓ S(t=tau_max) = {S_ode[-1]:.6e}")
-
+    print(f"   ✓ S(t=t_max) = {S_ode[-1]:.6e}")
+    
     # Compare methods
     max_diff = np.max(np.abs(S_expm - S_ode))
     print(f"   ✓ Max |S_expm - S_ode| = {max_diff:.2e}")
@@ -212,11 +204,11 @@ def main():
     results = solve_Q_TT_complete(
         nuc,
         start_state=(0, 0),
-        tau_max=tau_max,
-        n_points=n_points,
+        t_max=10000.0,
+        n_points=500,
         method='ode',
         sparse=False,
-        k_wrap=k_wrap,
+        k_wrap=1.0,
         protamine_params=protamine_params
     )
     
@@ -234,10 +226,10 @@ def main():
     gs = fig.add_gridspec(3, 3, hspace=0.3, wspace=0.3)
     
     # Convert to physical time
-    t_physical = tau_grid / nuc.k_wrap
+    t_physical = t_grid / nuc.k_wrap
     mfpt_physical = mfpt / nuc.k_wrap
     
-    # # --- Plot 1: G-matrix (nucleosome free energy) ---
+    # --- Plot 1: G-matrix (nucleosome free energy) ---
     ax1 = fig.add_subplot(gs[0, 0])
     im1 = ax1.imshow(nuc.G_mat, origin='lower', aspect='equal', cmap='viridis')
     plt.colorbar(im1, ax=ax1, label='Free energy (kT)')
@@ -344,7 +336,7 @@ def main():
     print("\nSummary:")
     print(f"  • Nucleosome: {nuc.id}-{nuc.subid}")
     print(f"  • MFPT: {mfpt:.4f} (dimensionless) = {mfpt_physical:.4f} seconds")
-    print(f"  • Half-life: {tau_half:.2f} (dimensionless) = {tau_half/nuc.k_wrap:.4f} seconds")
+    print(f"  • Half-life: {t_half:.2f} (dimensionless) = {t_half/nuc.k_wrap:.4f} seconds")
     print(f"  • Method agreement: max difference = {max_diff:.2e}")
     print(f"  • Protamine effect: β*μ = {beta_mu:.3f}, β*J = {beta_J:.3f}")
     print("=" * 80)
