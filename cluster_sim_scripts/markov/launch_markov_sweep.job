@@ -55,6 +55,7 @@ echo "=========================================="
 ################################################################################
 
 GRID_FILE="${1:-cluster_sim_scripts/markov/sweep_grid.tsv}"
+CLUSTER_CONFIG="cluster_sim_scripts/markov/cluster_markov_config.yaml"
 
 if [ ! -f "$GRID_FILE" ]; then
     echo "ERROR: grid file not found: $GRID_FILE"
@@ -100,6 +101,7 @@ singularity exec \
     --pwd /project \
     nucleosome.sif \
     python3 -m src.markov_execution.cli \
+        --config "$CLUSTER_CONFIG" \
         --dataset_dir "$DATASET_DIR" \
         --storage_dir "$STORAGE_DIR" \
         --prot_p_conc "$PROT_P_CONC" \
