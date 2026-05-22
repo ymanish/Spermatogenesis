@@ -1,0 +1,23 @@
+# Markov execution sweep specification.
+#
+# Edit this file, then regenerate the grid:
+#   python cluster_sim_scripts/markov/generate_sweep_grid.py
+# Then submit:
+#   ./cluster_sim_scripts/markov/submit_sweep.sh
+
+# ── Base paths ───────────────────────────────────────────────────────────────
+sprm_root: /group/pol_schiessel/Manish/HAMNucRetSeq_pipeline/SPRM_data
+storage_root: /group/pol_schiessel/Manish/Spermatogensis/output/markov_sweep_stable147
+
+# ── Datasets (explicit list; one storage subdir per dataset) ─────────────────
+datasets:
+  - ctrl01_random_genome_safe_stable147_refined
+  - ctrl02_random_genome_gcmatched_stable147_refined
+  - ctrl03_som_gcmatched_stable147_refined
+  - ctrl04_bound_prom_evicted_stable147_refined
+  - ctrl05_unbound_prom_yazdi_stable147_refined
+  - ret_all_stable147_refined
+
+# ── Parameter grid (full cross product) ──────────────────────────────────────
+prot_p_conc:        [0.0, 100.0, 500.0, 1000.0]
+prot_cooperativity: [0.0, 4.5]
