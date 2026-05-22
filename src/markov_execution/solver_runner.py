@@ -3,9 +3,6 @@ Solver Runner Module
 ====================
 
 Functions for solving individual nucleosome Markov chains.
-
-Author: MY
-Date: 2025-12-11
 """
 
 from typing import Dict, Optional, Tuple
@@ -28,35 +25,36 @@ def solve_single_nucleosome(
     method: str = 'expm',
     sparse: bool = False,
     dimensionless: bool = True,
+    eads_delta: float = 0.0,
+    eads_weight_mode: str = "none",
+    eads_apply: bool = False,
+    tnp2_config=None,
     compute_states: bool = False,
     start_state: Tuple[int, int] = (0, 0)
 ) -> dict:
     """
     Solve Markov chain for a single nucleosome.
-    
+
     Args:
-        nuc: Nucleosome instance with G_mat attribute
-        tau_grid: Time grid for evaluation (dimensionless τ)
-        k_wrap: Wrapping rate constant (s^-1)
-        protamine_params: Dictionary with protamine parameters
-        kT: Thermal energy (k_B T)
-        binding_sites: Number of binding sites (default: from nucleosome)
-        method: Solver method ('expm' or 'ode')
-        sparse: Whether to use sparse matrices
-        dimensionless: Whether Q is in dimensionless units
-        compute_states: Whether to compute full state probabilities
-        start_state: Initial state (l, r)
-    
+        nuc:               Nucleosome instance with G_mat attribute
+        tau_grid:          Time grid for evaluation (dimensionless τ)
+        k_wrap:            Wrapping rate constant (s^-1)
+        protamine_params:  Dict with keys k_bind, k_unbind, p_conc, cooperativity
+        kT:                Thermal energy (k_B T)
+        binding_sites:     Number of binding sites (default: from nucleosome)
+        method:            Solver method ('expm' or 'ode')
+        sparse:            Whether to use sparse matrices
+        dimensionless:     Whether Q is in dimensionless units
+        eads_delta:        Opening-energy reduction magnitude (k_B T)
+        eads_weight_mode:  Structural weight mode for the correction
+        eads_apply:        Whether to apply the Eads correction
+        compute_states:    Whether to compute full state probabilities P(t)
+        start_state:       Initial (l, r) state
+
     Returns:
-        Dictionary with results:
-            - 'survival': Survival function S(t)
-            - 'mfpt': Mean first passage time
-            - 'id': Nucleosome ID
-            - 'subid': Nucleosome subID
-            - 'states': List of transient states (if requested)
-            - 'state_probs': State probabilities P(t) (if requested)
+        Dict with: id, subid, survival, mfpt, mfpt_vec, tau_grid,
+                   and optionally state_probs + states
     """
-    # Build generator matrix
     Q_full, Q_TT, Q_AT, states, state_index, abs_index = build_full_Q_from_nucleosome(
         nuc,
         k_wrap=k_wrap,
@@ -64,79 +62,38 @@ def solve_single_nucleosome(
         kT=kT,
         binding_sites=binding_sites,
         sparse=sparse,
-        dimensionless=dimensionless
+        dimensionless=dimensionless,
+        eads_delta=eads_delta,
+        eads_weight_mode=eads_weight_mode,
+        eads_apply=eads_apply,
+        tnp2_config=tnp2_config,
     )
-    
-    # Compute survival function
+
     if compute_states:
         S, P_states = compute_survival(
-            Q_TT,
-            state_index,
-            start_state,
-            tau_grid,
-            method=method,
-            return_states=True
+            Q_TT, state_index, start_state, tau_grid,
+            method=method, return_states=True
         )
     else:
         S = compute_survival(
-            Q_TT,
-            state_index,
-            start_state,
-            tau_grid,
-            method=method,
-            return_states=False
+            Q_TT, state_index, start_state, tau_grid,
+            method=method, return_states=False
         )
         P_states = None
-    
-    # Compute MFPT
+
     mfpt, tau_vec = compute_mfpt_from_Q_TT(Q_TT, state_index, start_state)
-    
-    # Package results
+
     results = {
-        'id': nuc.id,
-        'subid': nuc.subid,
+        'id':       nuc.id,
+        'subid':    nuc.subid,
         'survival': S,
-        'mfpt': mfpt,
+        'mfpt':     mfpt,
         'mfpt_vec': tau_vec,
         'tau_grid': tau_grid
     }
-    
-    # Add optional outputs
+
     if compute_states and P_states is not None:
         results['state_probs'] = P_states
         results['states'] = states
-    
+
     return results
-
-
-# def compute_derived_quantities(results: dict) -> dict:
-#     """
-#     Compute derived quantities from solver results.
-    
-#     Args:
-#         results: Dictionary from solve_single_nucleosome
-    
-#     Returns:
-#         Dictionary with derived quantities:
-#             - 'half_life': Time when S(t) = 0.5
-#             - 'final_survival': S(t_max)
-#             - 'mean_survival': Mean survival over time
-#     """
-#     S = results['survival']
-#     tau_grid = results['tau_grid']
-#
-#     # Half-life (time when S = 0.5)
-#     idx_half = np.argmin(np.abs(S - 0.5))
-#     half_life = tau_grid[idx_half] if S[0] > 0.5 else np.nan
-#
-#     # Final survival probability
-#     final_survival = S[-1]
-#
-#     # Mean survival (area under curve / t_max)
-#     mean_survival = np.trapz(S, tau_grid) / tau_grid[-1] if len(tau_grid) > 1 else S[0]
-#
-#     return {
-#         'half_life': half_life,
-#         'final_survival': final_survival,
-#         'mean_survival': mean_survival
-#     }

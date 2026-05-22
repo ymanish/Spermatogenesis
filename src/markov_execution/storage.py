@@ -76,8 +76,26 @@ class MarkovStorage:
             self.index = pd.DataFrame(columns=[
                 'directory', 'k_wrap', 'tau_max', 'tau_steps', 'method',
                 'k_bind', 'k_unbind', 'p_conc', 'cooperativity',
-                'binding_sites', 'sparse', 'dimensionless'
+                'binding_sites', 'sparse', 'dimensionless', 'eads_delta',
+                'eads_weight_mode', 'eads_apply', 'max_nucs', 'max_nucs_seed',
+                'tnp2_enabled', 'tnp2_eps_cpg', 'tnp2_mu_t0',
             ])
+
+    @staticmethod
+    def _tnp2_storage_repr(params: dict) -> dict:
+        """Produce a canonical TNP2 sub-dict for hashing and indexing.
+
+        When the layer is disabled, all TNP2 specifics collapse to a single
+        ``{'tnp2_enabled': False}`` representation so different sweep points
+        with the layer off dedupe to one storage directory.
+        """
+        if not bool(params.get('tnp2_enabled', False)):
+            return {'tnp2_enabled': False}
+        return {
+            'tnp2_enabled': True,
+            'tnp2_eps_cpg': float(params.get('tnp2_eps_cpg', 1.0)),
+            'tnp2_mu_t0': float(params.get('tnp2_mu_t0', -8.0)),
+        }
     
     def _get_param_hash(self, params: dict) -> str:
         """
@@ -97,7 +115,13 @@ class MarkovStorage:
             'prot_params': params.get('prot_params'),
             'binding_sites': params.get('binding_sites'),
             'sparse': params.get('sparse'),
-            'dimensionless': params.get('dimensionless')
+            'dimensionless': params.get('dimensionless'),
+            'eads_delta': params.get('eads_delta', 0.0),
+            'eads_weight_mode': params.get('eads_weight_mode', 'none'),
+            'eads_apply': params.get('eads_apply', False),
+            'max_nucs': params.get('max_nucs'),
+            'max_nucs_seed': params.get('max_nucs_seed', 0),
+            'tnp2': self._tnp2_storage_repr(params),
         }
         full_hash = hashlib.sha256(
             json.dumps(param_repr, sort_keys=True).encode()
@@ -124,10 +148,23 @@ class MarkovStorage:
             f"k{params.get('k_wrap', 1.0):.1f}",
             f"p{prot.get('p_conc', 0.0):.1f}",
             f"c{prot.get('cooperativity', 0.0):.1f}",
+            f"eads_{params.get('eads_weight_mode', 'none')}_d{params.get('eads_delta', 0.0):.2f}",
             f"tau{int(params.get('tau_max', 1000))}",
             params.get('method', 'expm')
         ]
-        
+        if params.get('max_nucs') is not None:
+            parts.extend([
+                f"n{int(params.get('max_nucs'))}",
+                f"s{int(params.get('max_nucs_seed', 0))}",
+            ])
+
+        tnp2 = self._tnp2_storage_repr(params)
+        if tnp2.get('tnp2_enabled'):
+            parts.append(
+                f"tnp2_e{tnp2['tnp2_eps_cpg']:.2f}"
+                f"_mu{tnp2['tnp2_mu_t0']:.2f}"
+            )
+
         return "_".join(parts)
     
     def get_directory_name(self, params: dict) -> str:
@@ -188,6 +225,7 @@ class MarkovStorage:
         """
         prot = params.get('prot_params', {})
         
+        tnp2 = self._tnp2_storage_repr(params)
         new_entry = {
             'directory': dirname,
             'k_wrap': params.get('k_wrap'),
@@ -200,7 +238,15 @@ class MarkovStorage:
             'cooperativity': prot.get('cooperativity'),
             'binding_sites': params.get('binding_sites'),
             'sparse': params.get('sparse', False),
-            'dimensionless': params.get('dimensionless', True)
+            'dimensionless': params.get('dimensionless', True),
+            'eads_delta': params.get('eads_delta', 0.0),
+            'eads_weight_mode': params.get('eads_weight_mode', 'none'),
+            'eads_apply': params.get('eads_apply', False),
+            'max_nucs': params.get('max_nucs'),
+            'max_nucs_seed': params.get('max_nucs_seed', 0),
+            'tnp2_enabled': tnp2.get('tnp2_enabled', False),
+            'tnp2_eps_cpg': tnp2.get('tnp2_eps_cpg'),
+            'tnp2_mu_t0': tnp2.get('tnp2_mu_t0'),
         }
         
         self.index = pd.concat([self.index, pd.DataFrame([new_entry])], ignore_index=True)

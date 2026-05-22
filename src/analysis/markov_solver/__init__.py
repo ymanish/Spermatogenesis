@@ -24,13 +24,29 @@ from .state_space import (build_state_space)
 from .generator import (build_full_Q_from_nucleosome)
 from .mfpt import (compute_mfpt_from_Q_TT)
 from .survival import compute_survival
-from .nucleosome_utils import load_nucleosomes_from_file
+from .nucleosome_utils import load_nucleosomes_from_file, load_nucleosomes_from_sprm
 from .projection import (project_to_open_sites, compute_open_sites_evolution)
-from .drift_reversal import (
-    DriftReversalAnalyzer,
-    DriftReversalResults,
-    compare_to_ssa
+from .tnp2 import (
+    TNP2Config,
+    count_cpg,
+    get_site_ranges,
+    count_cpg_per_site,
+    compute_tnp2_occupancy_profile,
+    compute_jeff_profile,
+    compute_oriented_jeff_profiles,
+    parse_fasta,
 )
+# Barrier analysis - re-exported for backward compatibility when dependencies exist.
+try:
+    from src.analysis.barrier.drift_reversal import (
+        DriftReversalAnalyzer,
+        DriftReversalResults,
+        compare_to_ssa,
+    )
+except ImportError:
+    DriftReversalAnalyzer = None
+    DriftReversalResults = None
+    compare_to_ssa = None
 
 __all__ = [
     'solve_Q_TT_complete',
@@ -39,9 +55,18 @@ __all__ = [
     'compute_mfpt_from_Q_TT',
     'compute_survival',
     'load_nucleosomes_from_file',
+    'load_nucleosomes_from_sprm',
     'project_to_open_sites',
     'compute_open_sites_evolution',
     'DriftReversalAnalyzer',
     'DriftReversalResults',
     'compare_to_ssa',
+    'TNP2Config',
+    'count_cpg',
+    'get_site_ranges',
+    'count_cpg_per_site',
+    'compute_tnp2_occupancy_profile',
+    'compute_jeff_profile',
+    'compute_oriented_jeff_profiles',
+    'parse_fasta',
 ]

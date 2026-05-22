@@ -17,8 +17,12 @@ def solve_Q_TT_complete(
     method: str = 'expm',
     sparse: bool = False,
     k_wrap: Optional[float] = None,
-    protamine_params: Optional[Dict[str, float]] = None, 
-    dimensionless: bool = True
+    protamine_params: Optional[Dict[str, float]] = None,
+    dimensionless: bool = True,
+    eads_delta: float = 0.0,
+    eads_weight_mode: str = "none",
+    eads_apply: bool = False,
+    tnp2_config=None,
 ) -> Dict:
     """
     Complete Q_TT analysis: build matrix, compute MFPT and survival function.
@@ -42,6 +46,9 @@ def solve_Q_TT_complete(
             - 'p_conc': protamine concentration
             - 'cooperativity': cooperativity parameter
         dimensionless: If True, work in dimensionless units (1/k_wrap factored out) in the Q matrices
+        eads_delta: Opening-energy reduction magnitude in kBT units.
+        eads_weight_mode: Structural weight mode for the correction.
+        eads_apply: Whether to apply the Eads correction.
         
     Returns:
         results: Dictionary containing:
@@ -66,7 +73,15 @@ def solve_Q_TT_complete(
     """
     # Build Q_TT matrix
     Q_full, Q_TT, _, states, state_index, abs_index = build_full_Q_from_nucleosome(
-        nucleosome, k_wrap=k_wrap, sparse=sparse, protamine_params=protamine_params, dimensionless=dimensionless
+        nucleosome,
+        k_wrap=k_wrap,
+        sparse=sparse,
+        protamine_params=protamine_params,
+        dimensionless=dimensionless,
+        eads_delta=eads_delta,
+        eads_weight_mode=eads_weight_mode,
+        eads_apply=eads_apply,
+        tnp2_config=tnp2_config,
     )
     
     # Get parameters

@@ -8,9 +8,11 @@ Author: MY
 Date: 2025-12-11
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 import numpy as np
+
+from src.analysis.markov_solver.tnp2 import TNP2Config
 
 
 @dataclass
@@ -32,6 +34,11 @@ class MarkovConfig:
             prot_k_unbind: Protamine unbinding rate (s^-1)
             prot_p_conc: Protamine concentration (μM)
             prot_cooperativity: Cooperativity parameter J (k_B T)
+
+        Eads correction:
+            eads_delta: Opening-energy reduction magnitude (k_B T)
+            eads_weight_mode: Structural weight mode for the correction
+            eads_apply: Whether to apply the correction
         
         Computation parameters:
             tau_max: Maximum dimensionless time τ (τ = k_wrap × t_physical)
@@ -45,12 +52,12 @@ class MarkovConfig:
             batch_size: Number of nucleosomes per batch
             n_workers: Number of parallel workers
             max_nucs: Maximum number of nucleosomes to process (None = all)
+            max_nucs_seed: Seed used for deterministic random max_nucs sampling
         
         Output parameters:
             save_survival: Whether to save survival function S(t)
             save_states: Whether to save state probabilities P(t)
             save_mfpt: Whether to save MFPT values
-            save_generator: Whether to save Q matrices
     
     Computed attributes:
         t_grid: Array of dimensionless time points (computed from t_max/t_steps)
@@ -85,6 +92,14 @@ class MarkovConfig:
     prot_k_unbind: float = 89.7
     prot_p_conc: float = 0.0
     prot_cooperativity: float = 0.0
+
+    # Eads correction
+    eads_delta: float = 0.0
+    eads_weight_mode: str = "none"
+    eads_apply: bool = False
+
+    # TNP2 v2.0 extension (disabled by default - solver behaves as v1.0)
+    tnp2: TNP2Config = field(default_factory=TNP2Config)
     
     # Computation parameters
     tau_max: float = 1000.0 
@@ -98,12 +113,12 @@ class MarkovConfig:
     batch_size: int = 10
     n_workers: int = 10
     max_nucs: Optional[int] = None
+    max_nucs_seed: int = 0
     
     # Output parameters
     save_survival: bool = True
     save_states: bool = False
     save_mfpt: bool = True
-    save_generator: bool = False
     
     def __post_init__(self):
         """Compute derived attributes after initialization."""
@@ -143,6 +158,19 @@ class MarkovConfig:
         
         if self.batch_size <= 0:
             raise ValueError(f"batch_size must be positive, got {self.batch_size}")
+
+        if self.eads_delta < 0:
+            raise ValueError(f"eads_delta must be non-negative, got {self.eads_delta}")
+
+        allowed_eads_modes = {'none', 'uniform', 'outer8', 'inner6'}
+        if self.eads_weight_mode not in allowed_eads_modes:
+            raise ValueError(
+                f"eads_weight_mode must be one of {sorted(allowed_eads_modes)}, "
+                f"got {self.eads_weight_mode!r}"
+            )
+
+        if self.max_nucs is not None and self.max_nucs <= 0:
+            raise ValueError(f"max_nucs must be positive when set, got {self.max_nucs}")
     
     def get_info_dict(self) -> dict:
         """Get configuration as dictionary for logging/saving."""
@@ -153,10 +181,18 @@ class MarkovConfig:
             'prot_k_unbind': self.prot_k_unbind,
             'prot_p_conc': self.prot_p_conc,
             'prot_cooperativity': self.prot_cooperativity,
+            'eads_delta': self.eads_delta,
+            'eads_weight_mode': self.eads_weight_mode,
+            'eads_apply': self.eads_apply,
+            'tnp2_enabled': self.tnp2.enabled,
+            'tnp2_eps_cpg': self.tnp2.eps_cpg,
+            'tnp2_mu_t0': self.tnp2.mu_t0,
             'tau_max': self.tau_max,
             'tau_steps': self.tau_steps,
             'method': self.method,
             'sparse': self.sparse,
             'n_workers': self.n_workers,
-            'batch_size': self.batch_size
+            'batch_size': self.batch_size,
+            'max_nucs': self.max_nucs,
+            'max_nucs_seed': self.max_nucs_seed
         }

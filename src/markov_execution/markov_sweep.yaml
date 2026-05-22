@@ -1,0 +1,115 @@
+# ── Directories ──────────────────────────────────────────────────────────────
+# Paths are relative to the project root.
+sprm_root:    SPRM_data
+storage_root: output/markov_output/eads_weighted_sweep
+
+# ── Datasets ─────────────────────────────────────────────────────────────────
+# List specific dataset names, or leave out to run ALL subdirs of sprm_root.
+datasets:
+  - ret_all_stable147_refined
+  # - ctrl01_random_genome_safe_stable147_refined
+  # - ctrl02_random_genome_gcmatched_stable147_refined
+  - ctrl03_som_gcmatched_stable147_refined
+  # - ctrl04_bound_prom_evicted_stable147_refined
+  # - ctrl05_unbound_prom_yazdi_stable147_refined
+
+# ── Parameter grid ────────────────────────────────────────────────────────────
+# Every key here must be a list. The Cartesian product is computed automatically.
+# Example below gives 2 × 2 = 4 runs per dataset → 9 × 4 = 36 total jobs.
+param_grid:
+  prot_p_conc:        [0.0, 1.0, 10.0, 100.0]
+  prot_cooperativity: [0.0, 4.5]
+  eads_weight_mode:   [none]
+  eads_delta:         [0.0]
+
+# ── Fixed parameters (applied to every run) ───────────────────────────────────
+k_wrap:          1.0
+binding_sites:   14
+prot_k_unbind:   89.7
+prot_k_bind:     1.0
+tau_max:         1000.0
+tau_steps:       500
+method:          ode
+sparse:          false
+
+# ── Execution ─────────────────────────────────────────────────────────────────
+batch_size:  100
+n_workers:   20
+
+# ── Output ────────────────────────────────────────────────────────────────────
+save_survival: false
+save_states:   false
+save_mfpt:     true
+# max_nucs:      none     # set to e.g. 100 for a quick test run
+max_nucs_seed: 9        # used for deterministic random sampling when max_nucs is set
+
+# ── Behaviour ─────────────────────────────────────────────────────────────────
+# true  → skip (dataset, param combo) pairs where output already exists
+# false → re-run and overwrite everything
+skip_existing: false
+
+# ── TNP2 J_eff extension ──────────────────────────────────────────────────────
+# Disabled by default. When enabled, sequences are attached to nucleosomes via
+# `dataset_fasta` below and CpG-dependent TNP2 occupancy reduces the effective
+# protamine cooperativity J_eff used by the rewrapping gate. Datasets without a
+# FASTA mapping have TNP2 forced off (logged as a warning).  When all combos
+# under a dataset have TNP2 disabled, the storage layer collapses them to a
+# single output directory.
+#
+# Any of the tnp2_* keys below can be moved into `param_grid` to sweep over
+# them.
+tnp2_enabled:            false   # whether to apply the TNP2 extension at all
+tnp2_eps_cpg:            1.0    # k_BT per CpG dinucleotide
+tnp2_mu_t0:              -8.0    # ln([TNP2] / K_d,0); midpoint at N_CpG = -mu_t0/eps
+
+# ── Per-dataset FASTA registry (only consulted when TNP2 is enabled) ─────────
+# Paths are relative to the project root.  id_style is 'name' for named-peak
+# datasets and 'coord' for chr:start-end-keyed controls.
+hamnucret_fasta_dir: /home/pol_schiessel/maya620d/pol/Projects/Codebase/HAMNucRetSeq_pipeline
+
+dataset_fasta:
+  ret_all_stable147_refined:
+    path: hamnucret_fasta_dir/RET_output/all/w167/fully_wrapped/crystal_freedna_md/stablepos/stable147.fa
+    id_style: name
+  ctrl01_random_genome_safe_stable147_refined:
+    path: hamnucret_fasta_dir/SOM_output/control_sets/ctrl01_random_genome_safe/w167/fully_wrapped/crystal_freedna_md/stablepos/stable147.fa
+    id_style: name
+  ctrl02_random_genome_gcmatched_stable147_refined:
+    path: hamnucret_fasta_dir/SOM_output/control_sets/ctrl02_random_genome_gcmatched/w167/fully_wrapped/crystal_freedna_md/stablepos/stable147.fa
+    id_style: name
+  ctrl03_som_gcmatched_stable147_refined:
+    path: hamnucret_fasta_dir/SOM_output/control_sets/ctrl03_som_gcmatched/w167/fully_wrapped/crystal_freedna_md/stablepos/stable147.fa
+    id_style: name
+  ctrl04_bound_prom_evicted_stable147_refined:
+    path: hamnucret_fasta_dir/SOM_output/control_sets/ctrl04_bound_prom_evicted/w167/fully_wrapped/crystal_freedna_md/stablepos/stable147.fa
+    id_style: name
+  ctrl05_unbound_prom_yazdi_stable147_refined:
+    path: hamnucret_fasta_dir/SOM_output/control_sets/ctrl05_unbound_prom_yazdi/w167/fully_wrapped/crystal_freedna_md/stablepos/stable147.fa
+    id_style: name
+  ret_all:
+    path: hamnucret_fasta_dir/RET_output/all/w167/fully_wrapped/crystal_freedna_md/stablepos/stable147.fa
+    id_style: name
+  ret_single_nuc:
+    path: hamnucret_fasta_dir/RET_data/single_nuc/stable_147/stable147.fa
+    id_style: name
+  ret_intermediate_nuc:
+    path: hamnucret_fasta_dir/RET_data/intermediate/pooled_peaks_intermediate_nuc147.fa
+    id_style: name
+  ret_broad_nuc:
+    path: hamnucret_fasta_dir/RET_data/broad_ambiguous/pooled_peaks_broad_ambiguous_nuc147.fa
+    id_style: name
+  ctrl01_random_genome_safe:
+    path: hamnucret_fasta_dir/SPRM_IN_SEQ/SOM_data/control_sets/ctrl01_random_genome_safe/ctrl01.fa
+    id_style: coord
+  ctrl02_random_genome_gcmatched:
+    path: hamnucret_fasta_dir/SPRM_IN_SEQ/SOM_data/control_sets/ctrl02_random_genome_gcmatched/ctrl02.fa
+    id_style: coord
+  ctrl03_som_gcmatched:
+    path: hamnucret_fasta_dir/SPRM_IN_SEQ/SOM_data/control_sets/ctrl03_som_gcmatched/ctrl03.fa
+    id_style: name
+  ctrl04_bound_prom_evicted:
+    path: hamnucret_fasta_dir/SPRM_IN_SEQ/SOM_data/control_sets/ctrl04_bound_prom_evicted/ctrl04.fa
+    id_style: name
+  ctrl05_unbound_prom_random:
+    path: hamnucret_fasta_dir/SPRM_IN_SEQ/SOM_data/control_sets/ctrl05_unbound_prom_yazdi/ctrl05.fa
+    id_style: name

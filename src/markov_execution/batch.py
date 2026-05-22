@@ -15,7 +15,6 @@ from typing import List, Tuple, Optional
 from pathlib import Path
 import src.core.helper.bkeep as bk
 from src.core.nucleosomes import Nucleosome
-# from .solver_runner import solve_single_nucleosome, compute_derived_quantities
 from .solver_runner import solve_single_nucleosome
 from .output import save_batch_to_temp_files
 from .config import MarkovConfig
@@ -87,21 +86,19 @@ def run_batch_markov(
             method=config.method,
             sparse=config.sparse,
             dimensionless=config.dimensionless,
+            eads_delta=config.eads_delta,
+            eads_weight_mode=config.eads_weight_mode,
+            eads_apply=config.eads_apply,
+            tnp2_config=config.tnp2,
             compute_states=save_states,
             start_state=(0, 0)
         )
-        
-        # # Compute derived quantities
-        # derived = compute_derived_quantities(results)
         
         # Write summary to TSV
         writer_tsv.writerow([
             results['id'],
             results['subid'],
             results['mfpt'],
-            # derived['half_life'],
-            # derived['final_survival'],
-            # derived['mean_survival']
         ])
         
         # Store detailed data for Parquet
