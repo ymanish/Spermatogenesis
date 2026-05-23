@@ -27,6 +27,3 @@ venv/
 *.lprof
 *.codex
 
-# generated sweep grid (regenerate via generate_sweep_grid.py)
-cluster_sim_scripts/markov/sweep_grid.tsv
-

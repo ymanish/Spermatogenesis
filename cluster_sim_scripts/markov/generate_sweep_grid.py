@@ -29,6 +29,10 @@ def main():
                         help="Sweep YAML config (default: markov_sweep.yaml next to this script).")
     parser.add_argument("--output", type=Path, default=HERE / "sweep_grid.tsv",
                         help="Output TSV path (default: sweep_grid.tsv next to this script).")
+    parser.add_argument("--no-validate", action="store_true",
+                        help="Skip the dataset_dir existence check. Use when generating "
+                             "offline (e.g., on a laptop) with paths that only resolve on "
+                             "the cluster.")
     args = parser.parse_args()
 
     with open(args.config) as f:
@@ -41,13 +45,19 @@ def main():
     concs = sweep["prot_p_conc"]
     coops = sweep["prot_cooperativity"]
 
-    missing = [d for d in datasets if not (sprm_root / d).is_dir()]
-    if missing:
-        print(f"ERROR: {len(missing)} dataset directory(ies) not found under {sprm_root}:",
+    if args.no_validate:
+        print(f"WARN: --no-validate set; not checking that dataset_dirs exist under {sprm_root}",
               file=sys.stderr)
-        for d in missing:
-            print(f"  - {d}", file=sys.stderr)
-        sys.exit(1)
+    else:
+        missing = [d for d in datasets if not (sprm_root / d).is_dir()]
+        if missing:
+            print(f"ERROR: {len(missing)} dataset directory(ies) not found under {sprm_root}:",
+                  file=sys.stderr)
+            for d in missing:
+                print(f"  - {d}", file=sys.stderr)
+            print("Pass --no-validate to skip this check (e.g., generating offline for "
+                  "cluster paths).", file=sys.stderr)
+            sys.exit(1)
 
     raw_rows = list(itertools.product(datasets, concs, coops))
 

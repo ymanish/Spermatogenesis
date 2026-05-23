@@ -1,11 +1,25 @@
 #!/bin/bash
 # Submit the Markov sweep as a SLURM array job, auto-sized from the grid file.
 #
+# sweep_grid.tsv is a committed artifact — regenerate it LOCALLY (on your
+# laptop/workstation, where python3 + pyyaml are available natively) after
+# editing markov_sweep.yaml, then commit + push + pull on the cluster:
+#
+#   # locally:
+#   python cluster_sim_scripts/markov/generate_sweep_grid.py --no-validate
+#   git add cluster_sim_scripts/markov/markov_sweep.yaml \
+#           cluster_sim_scripts/markov/sweep_grid.tsv
+#   git commit -m "..." && git push
+#
+#   # on the cluster:
+#   git pull
+#   ./cluster_sim_scripts/markov/submit_sweep.sh
+#
 # Usage:
-#   ./cluster_sim_scripts/markov/submit_sweep.sh                  # use default grid
+#   ./cluster_sim_scripts/markov/submit_sweep.sh                  # default grid
 #   ./cluster_sim_scripts/markov/submit_sweep.sh path/to/grid.tsv # custom grid
 #
-# Override the concurrency cap by exporting CONCURRENCY before running:
+# Override the concurrency cap by exporting CONCURRENCY:
 #   CONCURRENCY=10 ./cluster_sim_scripts/markov/submit_sweep.sh
 
 set -e
@@ -16,8 +30,19 @@ CONCURRENCY="${CONCURRENCY:-20}"
 
 if [ ! -f "$GRID" ]; then
     echo "ERROR: grid file not found: $GRID"
-    echo "Run: python $HERE/generate_sweep_grid.py"
+    echo ""
+    echo "sweep_grid.tsv is a committed artifact. Regenerate it locally:"
+    echo "  python $HERE/generate_sweep_grid.py --no-validate"
+    echo "Then: git add ... && git commit && git push, and 'git pull' on the cluster."
     exit 1
+fi
+
+# Sanity check: warn if the TSV is older than the YAML (likely stale).
+YAML="$HERE/markov_sweep.yaml"
+if [ -f "$YAML" ] && [ "$YAML" -nt "$GRID" ]; then
+    echo "WARN: $YAML is newer than $GRID."
+    echo "      sweep_grid.tsv may be stale. Regenerate locally and recommit."
+    echo ""
 fi
 
 N=$(($(wc -l < "$GRID") - 1))   # subtract header

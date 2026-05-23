@@ -10,10 +10,14 @@
 # Per-task overrides supplied by launch_markov_sweep.job from sweep_grid.tsv:
 #   --dataset_dir, --storage_dir, --prot_p_conc, --prot_cooperativity, --n_workers
 #
-# Workflow:
-#   1. Edit this file (datasets, parameter grid, or solver defaults)
-#   2. python cluster_sim_scripts/markov/generate_sweep_grid.py
-#   3. ./cluster_sim_scripts/markov/submit_sweep.sh
+# Workflow (sweep_grid.tsv is a COMMITTED artifact — regenerate locally):
+#   # locally (laptop/workstation with python3 + pyyaml):
+#   1. Edit this file
+#   2. python cluster_sim_scripts/markov/generate_sweep_grid.py --no-validate
+#   3. git add markov_sweep.yaml sweep_grid.tsv && git commit && git push
+#   # on the cluster:
+#   4. git pull
+#   5. ./cluster_sim_scripts/markov/submit_sweep.sh
 
 # ── Sweep specification (read by generate_sweep_grid.py) ─────────────────────
 sprm_root: /group/pol_schiessel/Manish/HAMNucRetSeq_pipeline/SPRM_data
