@@ -55,7 +55,7 @@ echo "=========================================="
 ################################################################################
 
 GRID_FILE="${1:-cluster_sim_scripts/markov/sweep_grid.tsv}"
-CLUSTER_CONFIG="cluster_sim_scripts/markov/cluster_markov_config.yaml"
+CLUSTER_CONFIG="cluster_sim_scripts/markov/markov_sweep.yaml"
 
 if [ ! -f "$GRID_FILE" ]; then
     echo "ERROR: grid file not found: $GRID_FILE"

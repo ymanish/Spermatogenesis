@@ -36,9 +36,10 @@ def main():
 
     sprm_root = Path(cfg["sprm_root"])
     storage_root = Path(cfg["storage_root"])
-    datasets = cfg["datasets"]
-    concs = cfg["prot_p_conc"]
-    coops = cfg["prot_cooperativity"]
+    sweep = cfg["sweep"]
+    datasets = sweep["datasets"]
+    concs = sweep["prot_p_conc"]
+    coops = sweep["prot_cooperativity"]
 
     missing = [d for d in datasets if not (sprm_root / d).is_dir()]
     if missing:

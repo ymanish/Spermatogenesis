@@ -1,23 +1,68 @@
-# Markov execution sweep specification.
+# Markov sweep + cluster solver config (single source of truth).
 #
-# Edit this file, then regenerate the grid:
-#   python cluster_sim_scripts/markov/generate_sweep_grid.py
-# Then submit:
-#   ./cluster_sim_scripts/markov/submit_sweep.sh
+# Consumed by:
+#   - cluster_sim_scripts/markov/generate_sweep_grid.py
+#         reads: sprm_root, storage_root, sweep.{datasets, prot_p_conc, prot_cooperativity}
+#   - src.markov_execution.cli via --config (from launch_markov_sweep.job)
+#         reads: all top-level Markov solver keys (k_wrap, tau_max, method, ...)
+#         silently ignores: sprm_root, storage_root, sweep
+#
+# Per-task overrides supplied by launch_markov_sweep.job from sweep_grid.tsv:
+#   --dataset_dir, --storage_dir, --prot_p_conc, --prot_cooperativity, --n_workers
+#
+# Workflow:
+#   1. Edit this file (datasets, parameter grid, or solver defaults)
+#   2. python cluster_sim_scripts/markov/generate_sweep_grid.py
+#   3. ./cluster_sim_scripts/markov/submit_sweep.sh
 
-# ── Base paths ───────────────────────────────────────────────────────────────
+# ── Sweep specification (read by generate_sweep_grid.py) ─────────────────────
 sprm_root: /group/pol_schiessel/Manish/HAMNucRetSeq_pipeline/SPRM_data
 storage_root: /group/pol_schiessel/Manish/Spermatogensis/output/markov_sweep_stable147
 
-# ── Datasets (explicit list; one storage subdir per dataset) ─────────────────
-datasets:
-  - ctrl01_random_genome_safe_stable147_refined
-  - ctrl02_random_genome_gcmatched_stable147_refined
-  - ctrl03_som_gcmatched_stable147_refined
-  - ctrl04_bound_prom_evicted_stable147_refined
-  - ctrl05_unbound_prom_yazdi_stable147_refined
-  - ret_all_stable147_refined
+sweep:
+  datasets:
+    - ctrl01_random_genome_safe_stable147_refined
+    - ctrl02_random_genome_gcmatched_stable147_refined
+    - ctrl03_som_gcmatched_stable147_refined
+    - ctrl04_bound_prom_evicted_stable147_refined
+    - ctrl05_unbound_prom_yazdi_stable147_refined
+    - ret_all_stable147_refined
 
-# ── Parameter grid (full cross product) ──────────────────────────────────────
-prot_p_conc:        [0.0, 100.0, 500.0, 1000.0]
-prot_cooperativity: [0.0, 4.5]
+  prot_p_conc:        [0.0, 100.0, 500.0, 1000.0]
+  prot_cooperativity: [0.0, 4.5]
+
+# ── Markov solver defaults (read by the Markov CLI via --config) ─────────────
+# Per-task values are supplied by the .job script — left null/omitted here.
+dataset_dir: null
+infile: null
+storage_dir: null
+dataset: null
+
+# Nucleosome parameters
+k_wrap: 1.0
+binding_sites: 14
+
+# Protamine kinetics (prot_p_conc / prot_cooperativity are NOT declared at top
+# level here — they live inside `sweep` and are passed per-task by the .job.)
+prot_k_unbind: 89.7
+prot_k_bind: 1.0
+
+# Computation
+tau_max: 1000.0
+tau_steps: 500
+method: ode
+sparse: false
+
+# Execution (n_workers overridden by $SLURM_NTASKS in the .job)
+batch_size: 10
+n_workers: 20
+
+# Output
+save_survival: true
+save_states: false
+save_mfpt: true
+
+# Testing / debugging
+max_nucs: null
+subids_start: null
+subids_end: null
