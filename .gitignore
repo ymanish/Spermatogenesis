@@ -2,7 +2,7 @@
 **__pycache__
 **.pyc
 **.DS_Store
-
+.ipynb_checkpoints/
 # ignore folders
 # backend/
 output/
@@ -12,6 +12,11 @@ example/
 hamnucret_data/
 cluster_output/
 temps/
+SPRM_data/
+SPRM_output/
+latex/
+markov_output/
+
 # ignore egg-info directory
 **.egg-info/
 
@@ -20,3 +25,4 @@ temps/
 venv/
 **.sif
 *.lprof
+*.codex
