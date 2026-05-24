@@ -32,7 +32,7 @@ sweep:
     - ctrl05_unbound_prom_yazdi_stable147_refined
     - ret_all_stable147_refined
 
-  prot_p_conc:        [0.0, 100.0, 500.0, 1000.0]
+  prot_p_conc:        [0.0, 0.01, 0.1, 1.0, 10.0, 100.0, 500.0, 1000.0]
   prot_cooperativity: [0.0, 4.5]
 
 # ── Markov solver defaults (read by the Markov CLI via --config) ─────────────
@@ -52,8 +52,8 @@ prot_k_unbind: 89.7
 prot_k_bind: 1.0
 
 # Computation
-tau_max: 1000.0
-tau_steps: 500
+tau_max: 10000.0
+tau_steps: 1000
 method: ode
 sparse: false
 
