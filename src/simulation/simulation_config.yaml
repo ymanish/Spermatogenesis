@@ -1,0 +1,42 @@
+# ── Input / Output ───────────────────────────────────────────────────────────
+# Provide exactly one of dataset_dir (SPRM format) or infile (old TSV format).
+# Leave as null to require the CLI argument instead.
+
+dataset_dir: /home/pol_schiessel/maya620d/pol/Projects/Codebase/Spermatogensis/SPRM_data/ret_single_nuc          # e.g. SPRM_data/ret_single_nuc
+infile: null               # e.g. hamnucret_data/boundprom/breath_energy/001.tsv
+
+storage_dir:  /home/pol_schiessel/maya620d/pol/Projects/Codebase/Spermatogensis/SPRM_output/ret_single_nuc           # required — root directory for output files
+dataset: null              # optional label prefixed to output file names
+
+# ── Nucleosome parameters ────────────────────────────────────────────────────
+k_wrap: 1.0
+binding_sites: 14
+
+# ── Protamine parameters ─────────────────────────────────────────────────────
+prot_k_unbind: 89.7
+prot_k_bind: 1.0
+prot_p_conc: 100.0
+prot_cooperativity: 4.5
+
+# ── Simulation time ───────────────────────────────────────────────────────────
+tau_stop: 10000.0          # maximum dimensionless time
+tau_num: 1000              # number of time-sample points
+
+# ── Simulation behaviour ──────────────────────────────────────────────────────
+inf_protamine: true        # infinite protamine supply (ignores p_conc for binding rate)
+renucleation: false        # allow nucleosome to re-form after full unwrapping
+replicates: 10             # independent replicates per nucleosome
+
+# ── Execution ─────────────────────────────────────────────────────────────────
+batch_size: 1             # nucleosomes per worker batch
+n_workers: 20               # parallel worker processes
+flush_every: 10000         # log-flush interval (steps)
+
+# ── Trajectory saving ─────────────────────────────────────────────────────────
+save_trajectories: false     # save full trajectories (time-consuming, large files)
+maxpoints_saved_trajectories: 1000   # max time-points saved per trajectory
+
+# ── Testing / debugging (leave null for full production runs) ─────────────────
+max_nucs: 20            # limit total nucleosomes processed
+subids_start: null         # old-format: start subid (inclusive)
+subids_end: null           # old-format: end subid (exclusive)

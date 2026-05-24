@@ -739,7 +739,7 @@ S = compute_survival(Q_TT, state_index, (0,0), t_grid, method='ode')
 ## References
 
 - **Markov Chain Theory**: Norris, J. R. (1998). *Markov Chains*. Cambridge University Press.
-- **Fast Protamine Limit**: See `docs/qssa_validation.md`
+- **Fast Protamine Limit**: QSSA validation documentation has been archived with the older QSSA workflow materials.
 
 ## See Also
 

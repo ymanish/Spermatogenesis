@@ -1,4 +1,4 @@
-name: nucleosome_sim
+name: nucleosome
 channels:
   - bioconda
   - conda-forge
@@ -11,6 +11,9 @@ dependencies:
   - matplotlib
   - seaborn
   - scipy
+  - pyyaml
+  - joblib
+  - statsmodels
   - brokenaxes
   - numba
   - tqdm

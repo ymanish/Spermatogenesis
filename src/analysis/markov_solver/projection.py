@@ -3,7 +3,6 @@ Projection utilities for (l,r) -> n space.
 """
 from typing import Dict, List, Tuple
 import numpy as np
-from scipy.linalg import expm
 
 
 def project_to_open_sites(

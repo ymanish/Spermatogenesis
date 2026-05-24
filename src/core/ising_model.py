@@ -115,6 +115,39 @@ def p_free(n: int, beta_mu: float, beta_J: float) -> float:
     return float(v[0] / Z_n)
 
 
+def p_free_site_dependent(n: int, beta_mu: float, beta_J_bonds) -> float:
+    """
+    Boundary-site free probability for a chain with site-dependent cooperativity.
+
+    ``beta_J_bonds`` is ordered from the outermost exposed site toward the
+    innermost site and must contain ``n - 1`` bond values.  With uniform bond
+    values this reduces to ``p_free(n, beta_mu, beta_J)``.
+    """
+    if beta_mu == -np.inf:
+        return 1.0
+    if n <= 0:
+        return 0.0
+
+    bonds = np.asarray(beta_J_bonds, dtype=float)
+    if bonds.size != max(n - 1, 0):
+        raise ValueError(f"Expected {n - 1} beta_J bonds for n={n}, got {bonds.size}")
+
+    ef2 = np.exp(0.5 * beta_mu)
+    b_outer = np.array([1.0, ef2], dtype=float)
+    b_inner = np.array([1.0, ef2], dtype=float)
+
+    v = b_outer.copy()
+    for beta_J in bonds:
+        T = np.array(
+            [[1.0, ef2], [ef2, np.exp(beta_mu + beta_J)]],
+            dtype=float,
+        )
+        v = T @ v
+
+    Z_n = float(b_inner @ v)
+    return float(v[0] / Z_n)
+
+
 def main(n, beta_mu, beta_J) -> None:
 
 
@@ -135,6 +168,8 @@ if __name__ == "__main__":
     p_conc = 10.0  # protamine concentration in uM
     k_bind = 1.0   # protamine binding rate in 1/(uM s)
     k_unbind = 89.7 # protamine unbinding rate in 1/s
-    cooperativity = 0.0  # unitless cooperativity parameter
+    cooperativity = 4.5  # unitless cooperativity parameter
     betamu = np.log(p_conc * k_bind / k_unbind)
-    main(n=14, beta_mu=betamu, beta_J=cooperativity)
+    for n in range(1, 15):
+        main(n=n, beta_mu=betamu, beta_J=cooperativity)
+    

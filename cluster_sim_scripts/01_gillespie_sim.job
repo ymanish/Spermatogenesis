@@ -9,9 +9,9 @@
 #SBATCH -N 1
 #SBATCH --mail-type=ALL
 #SBATCH -J Gillespie
-#SBATCH -D /home/pol_schiessel/maya620d/Spermatogensis
-#SBATCH --output=/home/pol_schiessel/maya620d/Spermatogensis/log/Array_eukaryote.%A_%a.out
-#SBATCH --error=/home/pol_schiessel/maya620d/Spermatogensis/log/Array_eukaryote.%A_%a.error
+#SBATCH -D /home/pol_schiessel/maya620d/Spermatogenesis
+#SBATCH --output=/home/pol_schiessel/maya620d/Spermatogenesis/log/Array_eukaryote.%A_%a.out
+#SBATCH --error=/home/pol_schiessel/maya620d/Spermatogenesis/log/Array_eukaryote.%A_%a.error
 #SBATCH -A undefined
 #SBATCH --exclude=compute-0-[13-15] ###Polars does not work on these nodes
 

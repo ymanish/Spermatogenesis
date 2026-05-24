@@ -1,9 +1,19 @@
 """
 Survival function computation for Markov chains.
+
+Column-sum CTMC convention:
+    Q[to_idx, from_idx] = rate(from -> to)
+    dp/dt = Q p for column probability vector p
 """
 from typing import Dict, List, Tuple
 import numpy as np
-from scipy.linalg import expm
+
+try:
+    from scipy.linalg import expm
+    _HAS_SCIPY = True
+except ImportError:
+    expm = None
+    _HAS_SCIPY = False
 
 
 def compute_survival(
@@ -59,6 +69,8 @@ def compute_survival(
         P_states = np.empty((len(tau_grid), M), dtype=float)
 
     if method == 'expm':
+        if not _HAS_SCIPY:
+            raise ImportError("scipy is required for survival method='expm'")
         # Matrix exponential method (accurate but slower)
         # Convert sparse to dense for expm if needed
         if hasattr(Q_trans, 'toarray'):
@@ -74,6 +86,8 @@ def compute_survival(
                 P_states[k, :] = p_t
     
     elif method == 'ode':
+        if not _HAS_SCIPY:
+            raise ImportError("scipy is required for survival method='ode'")
         # ODE solver method (faster for large systems)
         from scipy.integrate import solve_ivp
         

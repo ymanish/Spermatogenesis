@@ -1,10 +1,9 @@
-from enum import IntEnum
 from dataclasses import dataclass
-from typing import List, Dict, Optional
+from enum import IntEnum
+from typing import Dict, NamedTuple, Optional
+
 import numpy as np
-from typing import NamedTuple
-from functools import partial
-from src.config.var import create_nucleosomes_instance, create_protamines_instance
+
 from src.core.helper.tau_min import _compute_tau_min
 
 class SiteState(IntEnum):
@@ -47,59 +46,6 @@ REACTION_TARGET_STATE: Dict[ReactionType, SiteState] = {
 }
 
 
-class PilotConfig:
-    """Configuration for pilot replicate estimation study."""
-    
-    def __init__(self,
-                 k_wrap: float = 1.0,
-                 binding_sites: int = 14,
-                 tau_max: float = 10000.0,
-                 tau_steps: int = 1000,
-                 prot_k_unbind: float = 89.7,
-                 prot_k_bind: float = 1.0,
-                 prot_p_conc: float = 0.0,
-                 prot_cooperativity: float = 0.0,
-                 inf_protamine: bool = True,
-                 renucleation: bool = False,
-                 n_pilot_nucleosomes: int = 20,
-                 n_pilot_replicates: int = 50,
-                 start_idx: int = 0):
-     
-        self.k_wrap = k_wrap
-        self.binding_sites = binding_sites
-        self.tau_max = tau_max
-        self.tau_steps = tau_steps
-        self.tau_points = np.linspace(0, tau_max, tau_steps)
-        
-        self.prot_params = {
-            'k_unbind': prot_k_unbind,
-            'k_bind': prot_k_bind,
-            'p_conc': prot_p_conc,
-            'cooperativity': prot_cooperativity
-        }
-        
-        self.inf_protamine = inf_protamine
-        self.renucleation = renucleation
-        self.n_pilot_nucleosomes = n_pilot_nucleosomes
-        self.n_pilot_replicates = n_pilot_replicates
-        self.start_idx = start_idx
-        
-        # Calculate tau_min for renucleation
-        if renucleation:
-            self.tau_min = _compute_tau_min(k_wrap=k_wrap, ends=2, gamma=5.0)
-        else:
-            self.tau_min = None
-        
-        # Build parameters
-        self.build_params = {
-            'nucs_factory': partial(create_nucleosomes_instance, 
-                                   k_wrap=k_wrap, 
-                                   binding_sites=binding_sites),
-            'prot_factory': partial(create_protamines_instance, 
-                                   prot_params=self.prot_params)
-        }
-
-
 class SimulationConfig:
     """
     Configuration for full-scale Gillespie simulations.
@@ -138,7 +84,6 @@ class SimulationConfig:
         tau_points: Array of tau time points (computed from tau_max/tau_steps)
         prot_params: Dictionary of protamine parameters
         tau_min: Minimum tau for renucleation (computed if renucleation=True)
-        build_params: Factory functions for creating instances
     
     Example:
         >>> config = SimulationConfig(
@@ -253,19 +198,6 @@ class SimulationConfig:
             self.tau_min = _compute_tau_min(k_wrap=k_wrap, ends=2, gamma=5.0)
         else:
             self.tau_min = None
-        
-        # Build parameters (factory functions)
-        self.build_params = {
-            'nucs_factory': partial(
-                create_nucleosomes_instance,
-                k_wrap=k_wrap,
-                binding_sites=binding_sites
-            ),
-            'prot_factory': partial(
-                create_protamines_instance,
-                prot_params=self.prot_params
-            )
-        }
     
     def __repr__(self) -> str:
         """String representation of configuration."""
@@ -334,30 +266,3 @@ class SimulationConfig:
             save_trajectories=config_dict.get('save_trajectories', False),
             maxpoints_saved_trajectories=config_dict.get('maxpoints_saved_trajectories', 100),
         )
-
-
-@dataclass
-class RMSTAnalysis:
-    """Results from RMST-based variance analysis."""
-    sigma_within_sq: float          # Within-nucleosome variance
-    sigma_between_sq: float         # Between-nucleosome variance
-    R: float                        # Variance ratio
-    recommended_replicates: str     # Recommendation
-    n_nucleosomes: int              # Number of nucleosomes analyzed
-    n_replicates: int               # Number of replicates per nucleosome
-    condition_label: str            # Condition name
-    
-    # RMST statistics
-    mean_rmst: float                # Mean RMST across all
-    std_rmst: float                 # Std RMST across all
-    nucleosome_mean_rmsts: List[float]  # Per-nucleosome mean RMST
-    nucleosome_std_rmsts: List[float]   # Per-nucleosome std RMST
-    
-    # Tolerance-based calculation
-    tolerance: Optional[float] = None
-    n_reps_required: Optional[int] = None
-    
-    # Integration parameters
-    tau_max: float = None
-    delta_tau: float = None
-

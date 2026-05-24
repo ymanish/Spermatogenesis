@@ -14,45 +14,7 @@ from pathlib import Path
 from typing import List, Dict, Optional
 import src.core.helper.bkeep as bk
 from .config import MarkovConfig
-import pandas as pd 
-
-# def convert_trajectory_to_dataframe(traj_data: dict) -> pd.DataFrame:
-#     """
-#     Convert nested trajectory dict to DataFrame with list columns.
-    
-#     This format is Polars-compatible and allows lazy loading:
-#     - Each row = one trajectory (one nucleosome replicate)
-#     - Time series stored as lists in single cells
-#     - id/subid stored once per trajectory
-    
-#     Args:
-#         traj_data: Nested dictionary with trajectory data
-    
-#     Returns:
-#         DataFrame with efficient list columns
-    
-#     Example:
-#         >>> df = convert_trajectory_to_dataframe(traj_data)
-#         >>> df.columns
-#         Index(['id', 'subid', 'tau_grid', 'mfpt', 'mfpt_vec', 'survival', 'state_probs', 'states'])
-#     """
-#     rows = []
-    
-#     for nuc_id in traj_data:
-#         for subid in traj_data[nuc_id]:
-#             data = traj_data[nuc_id][subid]
-#             rows.append({
-#                 'id': nuc_id,
-#                 'subid': subid,
-#                 'tau_grid': data['tau_grid'],
-#                 'survival': data['survival'],
-#                 'mfpt': data.get('mfpt', None),
-#                 'mfpt_vec': data.get('mfpt_vec', None),
-#                 'state_probs': data.get('state_probs', None),
-#                 'states': data.get('states', None)
-#             })
-
-#     return pd.DataFrame(rows)
+import pandas as pd
 
 def save_batch_to_temp_files(detailed_data: List[Dict], parquet_path: str) -> None:
     """

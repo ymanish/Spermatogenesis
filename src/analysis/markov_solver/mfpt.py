@@ -1,5 +1,9 @@
 """
 MFPT computation for Markov chains.
+
+Column-sum CTMC convention:
+    Q[to_idx, from_idx] = rate(from -> to)
+    dp/dt = Q p for column probability vector p
 """
 from typing import Dict, Tuple
 import numpy as np
@@ -50,4 +54,3 @@ def compute_mfpt_from_Q_TT(
     # tau_vec = np.linalg.solve(Q_TT.T, -ones)
 
     return mfpt, tau_vec
-

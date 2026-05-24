@@ -30,7 +30,6 @@ class Nucleosome:
             self.G_mat = G_mat
         elif sequence is not None and sequence != "":
             raise NotImplementedError("G matrix computation from sequence is not implemented yet.")
-            self.G_mat = self.compute_G_from_sequence()
         else:
             raise ValueError("Either G_mat or sequence must be provided.")
 

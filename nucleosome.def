@@ -1,5 +1,5 @@
 Bootstrap: docker
-From: continuumio/miniconda3
+From: condaforge/mambaforge
 
 %labels
     OWNER = Manish Yadav
@@ -9,15 +9,15 @@ From: continuumio/miniconda3
     /home/pol_schiessel/maya620d/pol/Projects/Codebase/Spermatogensis/backend /opt/backend
 
 %post
-    /opt/conda/bin/conda update -n base conda -c defaults
-    /opt/conda/bin/conda env create -f /environment.yml
+    /opt/conda/bin/mamba env create -f /environment.yml
+    /opt/conda/bin/conda clean -afy
 
 %runscript
-    source /opt/conda/etc/profile.d/conda.sh
-    conda activate nucleosome_sim
-    exec "$@"
+    exec /opt/conda/bin/conda run --no-capture-output -n nucleosome "$@"
 
 %environment
-    export PYTHONPATH=/project:/opt/backend
-    export BASH_ENV=/opt/conda/etc/bashrc
-    export PATH=/opt/conda/envs/nucleosome_sim/bin:$PATH 
+    export PYTHONPATH=/project:/opt/backend:${PYTHONPATH:-}
+    export PATH=/opt/conda/envs/nucleosome/bin:/opt/conda/condabin:$PATH
+
+%test
+    /opt/conda/envs/nucleosome/bin/python -c "import numpy, polars, pandas, scipy, yaml"

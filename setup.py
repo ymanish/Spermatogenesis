@@ -1,23 +1,9 @@
-from setuptools import setup, find_packages, Extension
-from Cython.Build import cythonize
-
-extensions = [
-    Extension(
-        name="src.cyt_script.tricodec",          
-        sources=["src/cyt_script/tricodec.pyx"],
-        language="c",
-    ),
-    Extension(
-        name="src.cyt_script.edit_tricodec",
-        sources=["src/cyt_script/edit_tricodec.pyx"],
-        language="c",
-    ),
-]
+from setuptools import setup, find_packages
 
 
 setup(
         name="spermatogenesis",
-        version='0.1',
+        version='1.1',
         packages=find_packages(),
         author='Manish Yadav',
         author_email='manish20072013 at gmail dot com',
@@ -26,7 +12,5 @@ setup(
         long_description_content_type='text/markdown',
         license='GPL3', 
         python_requires=">=3.12",
-        setup_requires=["Cython>=0.29"],
-        ext_modules=cythonize(extensions, language_level=3, annotate=True)
-
+        setup_requires=[],
     )
