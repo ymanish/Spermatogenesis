@@ -1,0 +1,39 @@
+# ── Input / Output ───────────────────────────────────────────────────────────
+# Provide exactly one of dataset_dir (SPRM format) or infile (old TSV format).
+# Leave as null to require the CLI argument instead.
+
+dataset_dir: /home/pol_schiessel/maya620d/pol/Projects/Codebase/Spermatogensis/SPRM_data/ret_all_stable147_refined
+infile: null               # e.g. hamnucret_data/boundprom/breath_energy/001.tsv
+
+storage_dir: /home/pol_schiessel/maya620d/pol/Projects/Codebase/Spermatogensis/output/markov_output/ret_all_stable147_refined
+dataset: null              # optional label prefixed to output file names
+
+# ── Nucleosome parameters ────────────────────────────────────────────────────
+k_wrap: 1.0
+binding_sites: 14
+
+# ── Protamine parameters ─────────────────────────────────────────────────────
+prot_k_unbind: 89.7
+prot_k_bind: 1.0
+prot_p_conc: 100.0
+prot_cooperativity: 4.5
+
+# ── Computation ───────────────────────────────────────────────────────────────
+tau_max: 1000.0            # maximum dimensionless time
+tau_steps: 500             # number of time-sample points
+method: ode                # solver method: expm or ode (ode is faster)
+sparse: false
+
+# ── Execution ─────────────────────────────────────────────────────────────────
+batch_size: 10
+n_workers: 20
+
+# ── Output ────────────────────────────────────────────────────────────────────
+save_survival: true
+save_states: false
+save_mfpt: true
+
+# ── Testing / debugging (leave null for full production runs) ─────────────────
+max_nucs: 100             # limit total nucleosomes processed
+subids_start: null         # old-format only: start subid (inclusive)
+subids_end: null           # old-format only: end subid (exclusive)

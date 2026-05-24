@@ -143,6 +143,16 @@ class MarkovConfig:
         
         if self.batch_size <= 0:
             raise ValueError(f"batch_size must be positive, got {self.batch_size}")
+
+        # With no protamine in solution, cooperativity has no physical effect:
+        # there is no neighbor to couple to. Reject the combination to prevent
+        # generating duplicate runs that all collapse to the (conc=0, coop=0) result.
+        if self.prot_p_conc == 0.0 and self.prot_cooperativity != 0.0:
+            raise ValueError(
+                f"prot_cooperativity must be 0.0 when prot_p_conc is 0.0 "
+                f"(got prot_cooperativity={self.prot_cooperativity}). "
+                f"Without protamine, cooperativity has no effect."
+            )
     
     def get_info_dict(self) -> dict:
         """Get configuration as dictionary for logging/saving."""

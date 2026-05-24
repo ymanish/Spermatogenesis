@@ -1,0 +1,135 @@
+#!/bin/bash
+# ---------------- SLURM parameters ----------------
+#SBATCH -p all.q
+#SBATCH --ntasks 20
+#SBATCH --mem-per-cpu=1G
+#SBATCH --cpus-per-task=1
+#SBATCH --tmp=10G
+#SBATCH -N 1
+#SBATCH --mail-type=ALL
+#SBATCH -J Markov_Sweep
+#SBATCH -D /home/pol_schiessel/maya620d/Spermatogenesis
+#SBATCH --output=/home/pol_schiessel/maya620d/Spermatogenesis/log/markov_sweep_%A_%a.out
+#SBATCH --error=/home/pol_schiessel/maya620d/Spermatogenesis/log/markov_sweep_%A_%a.error
+#SBATCH --exclude=compute-0-[13-15]
+#SBATCH --time=48:00:00
+# NOTE: --array is provided on the sbatch command line by submit_sweep.sh.
+
+################################################################################
+# Markov execution sweep - SLURM array task
+################################################################################
+# Reads one row from sweep_grid.tsv (selected by $SLURM_ARRAY_TASK_ID) and
+# runs the Markov CLI with that row's overrides. All other parameters come
+# from src/markov_execution/markov_config.yaml.
+#
+# Usage (via submit_sweep.sh):
+#   sbatch --array=1-N%K cluster_sim_scripts/markov/launch_markov_sweep.job [grid_tsv]
+################################################################################
+
+set -e
+
+# ---------------- Load modules --------------------
+module load apps/singularity
+
+# ---------------- Runtime setup -------------------
+export TMPDIR=/tmp/${USER}_${SLURM_JOB_ID}
+mkdir -p "$TMPDIR"
+echo "Using TMPDIR=$TMPDIR"
+
+# Prevent nested parallelism
+export OMP_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export NUMBA_NUM_THREADS=1
+
+echo "=========================================="
+echo "Job ID:        $SLURM_JOB_ID"
+echo "Array Task ID: $SLURM_ARRAY_TASK_ID"
+echo "Node:          $SLURM_NODELIST"
+echo "CPUs:          $SLURM_NTASKS"
+echo "Started:       $(date)"
+echo "=========================================="
+
+################################################################################
+# READ ROW FROM GRID
+################################################################################
+
+GRID_FILE="${1:-cluster_sim_scripts/markov/sweep_grid.tsv}"
+CLUSTER_CONFIG="cluster_sim_scripts/markov/markov_sweep.yaml"
+
+if [ ! -f "$GRID_FILE" ]; then
+    echo "ERROR: grid file not found: $GRID_FILE"
+    echo "Run: python cluster_sim_scripts/markov/generate_sweep_grid.py"
+    exit 1
+fi
+
+# Skip header (NR==1), select row $SLURM_ARRAY_TASK_ID + 1
+ROW=$(awk -v id="$SLURM_ARRAY_TASK_ID" 'NR==id+1' "$GRID_FILE")
+
+if [ -z "$ROW" ]; then
+    echo "ERROR: no row for array task $SLURM_ARRAY_TASK_ID in $GRID_FILE"
+    exit 1
+fi
+
+IFS=$'\t' read -r TASK_ID DATASET_NAME DATASET_DIR STORAGE_DIR PROT_P_CONC PROT_COOPERATIVITY <<< "$ROW"
+
+echo ""
+echo "--- Task parameters ---"
+echo "task_id:             $TASK_ID"
+echo "dataset_name:        $DATASET_NAME"
+echo "dataset_dir:         $DATASET_DIR"
+echo "storage_dir:         $STORAGE_DIR"
+echo "prot_p_conc:         $PROT_P_CONC"
+echo "prot_cooperativity:  $PROT_COOPERATIVITY"
+echo ""
+
+if [ ! -d "$DATASET_DIR" ]; then
+    echo "ERROR: dataset directory not found: $DATASET_DIR"
+    exit 1
+fi
+
+mkdir -p "$STORAGE_DIR"
+
+################################################################################
+# RUN MARKOV SOLVER
+################################################################################
+
+echo "-> Launching Markov solver..."
+singularity exec \
+    --env TMPDIR="$TMPDIR" \
+    --bind $PWD:/project,"$TMPDIR":"$TMPDIR" \
+    --pwd /project \
+    nucleosome.sif \
+    python3 -m src.markov_execution.cli \
+        --config "$CLUSTER_CONFIG" \
+        --dataset_dir "$DATASET_DIR" \
+        --storage_dir "$STORAGE_DIR" \
+        --prot_p_conc "$PROT_P_CONC" \
+        --prot_cooperativity "$PROT_COOPERATIVITY" \
+        --n_workers "$SLURM_NTASKS"
+
+EXIT_CODE=$?
+
+################################################################################
+# CLEANUP AND STATUS
+################################################################################
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo ""
+    echo "=========================================="
+    echo "SUCCESS: task $TASK_ID complete"
+    echo "Dataset: $DATASET_NAME  p_conc=$PROT_P_CONC  coop=$PROT_COOPERATIVITY"
+    echo "Ended:   $(date)"
+    echo "=========================================="
+else
+    echo ""
+    echo "=========================================="
+    echo "ERROR: task $TASK_ID failed (exit $EXIT_CODE)"
+    echo "Dataset: $DATASET_NAME  p_conc=$PROT_P_CONC  coop=$PROT_COOPERATIVITY"
+    echo "Ended:   $(date)"
+    echo "=========================================="
+    exit $EXIT_CODE
+fi
+
+rm -rf "$TMPDIR"
+exit 0
