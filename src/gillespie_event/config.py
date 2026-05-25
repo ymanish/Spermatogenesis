@@ -6,7 +6,6 @@ tau_max is a censoring boundary, n_survival_points only controls the empirical
 S(tau) grid resolution.
 """
 
-from typing import Optional
 import numpy as np
 
 
