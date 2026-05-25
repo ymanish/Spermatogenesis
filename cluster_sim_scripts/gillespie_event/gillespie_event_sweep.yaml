@@ -56,7 +56,7 @@ n_survival_points: 1000
 
 # Simulation behavior
 inf_protamine: true
-replicates:    100
+replicates:    10
 
 # Execution (n_workers overridden by $SLURM_NTASKS in the .job)
 batch_size:  1
