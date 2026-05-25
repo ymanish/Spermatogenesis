@@ -142,3 +142,61 @@ def test_deterministic_with_same_seed():
     assert a.censored == b.censored
     np.testing.assert_array_equal(a.traj_tau, b.traj_tau)
     np.testing.assert_array_equal(a.traj_n_closed, b.traj_n_closed)
+
+
+# ─── run_single_replicate ──────────────────────────────────────────────
+
+from src.gillespie_event.replicate import run_single_replicate
+
+
+def test_run_single_replicate_returns_replicate_result():
+    nuc = _make_nuc(binding_sites=4)
+    prot_params = {
+        "k_unbind": 89.7, "k_bind": 1.0,
+        "p_conc": 0.0, "cooperativity": 0.0,
+    }
+    result = run_single_replicate(
+        nuc=nuc, replicate_num=0, prot_params=prot_params,
+        tau_max=1e6, inf_protamine=True,
+    )
+    assert isinstance(result, ReplicateResult)
+
+
+def test_run_single_replicate_does_not_mutate_input_nuc():
+    nuc = _make_nuc(binding_sites=4)
+    state_before = nuc.state.copy()
+    n_closed_before = nuc.n_closed
+    prot_params = {
+        "k_unbind": 89.7, "k_bind": 1.0,
+        "p_conc": 0.0, "cooperativity": 0.0,
+    }
+    run_single_replicate(
+        nuc=nuc, replicate_num=0, prot_params=prot_params,
+        tau_max=1.0, inf_protamine=True,
+    )
+    np.testing.assert_array_equal(nuc.state, state_before)
+    assert nuc.n_closed == n_closed_before
+
+
+def test_run_single_replicate_deterministic_across_reps():
+    """Different replicate_num must yield different results; same rep_num same nuc same result."""
+    nuc = _make_nuc(binding_sites=4)
+    prot_params = {
+        "k_unbind": 89.7, "k_bind": 1.0,
+        "p_conc": 0.0, "cooperativity": 0.0,
+    }
+    a = run_single_replicate(nuc=nuc, replicate_num=0,
+                             prot_params=prot_params, tau_max=1e6,
+                             inf_protamine=True)
+    b = run_single_replicate(nuc=nuc, replicate_num=0,
+                             prot_params=prot_params, tau_max=1e6,
+                             inf_protamine=True)
+    c = run_single_replicate(nuc=nuc, replicate_num=1,
+                             prot_params=prot_params, tau_max=1e6,
+                             inf_protamine=True)
+    # Same rep_num: identical (or both NaN for detach_tau)
+    if not (math.isnan(a.detach_tau) and math.isnan(b.detach_tau)):
+        assert a.detach_tau == b.detach_tau
+    # Different rep_num: trajectory should differ (overwhelmingly likely)
+    assert (a.traj_tau.shape != c.traj_tau.shape
+            or not np.array_equal(a.traj_tau, c.traj_tau))
