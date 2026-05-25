@@ -10,7 +10,7 @@ src/core/gillespie_simulator.py, with two differences:
 Returns a single ReplicateResult dataclass instead of yielding states.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, Optional
 import math
 import numpy as np
