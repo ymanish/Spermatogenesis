@@ -8,6 +8,10 @@ import numpy as np
 from src.core.gillespie_event_simulator import ReplicateResult
 from src.core.nucleosomes import Nucleosome
 
+# numpy >= 2.0 renamed `trapz` to `trapezoid`. Pick whichever is available so
+# the pipeline runs on both old (cluster image legacy) and new numpy.
+_trapezoid = getattr(np, "trapezoid", None) or np.trapz
+
 
 @dataclass
 class NucleosomeAggregate:
@@ -84,7 +88,7 @@ def aggregate_replicates(
 
     # First-passage stats
     survival = _empirical_survival(detach_times, tau_grid)
-    rmst = float(np.trapz(survival, tau_grid))
+    rmst = float(_trapezoid(survival, tau_grid))
     half_life = _half_life(survival, tau_grid)
     censored_fraction = float(censored.mean())
     final_survival = float(survival[-1])

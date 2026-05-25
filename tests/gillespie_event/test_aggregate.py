@@ -91,7 +91,8 @@ def test_aggregate_rmst_matches_trapz_of_survival():
     ]
     tau_grid = np.linspace(0.0, 100.0, 1001)
     agg = aggregate_replicates(nuc, results, tau_grid)
-    assert agg.rmst == pytest.approx(np.trapz(agg.survival, tau_grid))
+    _trapz = getattr(np, "trapezoid", None) or np.trapz
+    assert agg.rmst == pytest.approx(_trapz(agg.survival, tau_grid))
 
 
 def test_aggregate_half_life_when_crossed():
