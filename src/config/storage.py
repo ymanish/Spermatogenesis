@@ -92,6 +92,7 @@ class SimulationStorage:
         # Create subdirectories
         (sim_dir / "trajectories").mkdir(exist_ok=True)
         (sim_dir / "summaries").mkdir(exist_ok=True)
+        (sim_dir / "survival").mkdir(exist_ok=True)
         
         # Save parameters
         params_file = sim_dir / "parameters.json"
@@ -133,19 +134,20 @@ class SimulationStorage:
     def get_output_paths(self, params: dict, file_id: str) -> dict:
         """
         Get output file paths for a specific file ID.
-        
+
         Args:
             params: Simulation parameters
             file_id: File identifier (e.g., '001', 'RET_001')
-        
+
         Returns:
-            Dictionary with 'trajectory' and 'summary' paths
+            Dictionary with 'trajectory', 'summary', 'survival', 'param_dir' paths
         """
         sim_dir = self.ensure_directory_structure(params)
         return {
             'trajectory': sim_dir / "trajectories" / f"{file_id}.parquet",
-            'summary': sim_dir / "summaries" / f"{file_id}.tsv",
-            'param_dir': sim_dir
+            'summary':    sim_dir / "summaries"    / f"{file_id}.tsv",
+            'survival':   sim_dir / "survival"     / f"{file_id}.parquet",
+            'param_dir':  sim_dir,
         }
     
     def find_simulations(self, **query_params) -> pd.DataFrame:
