@@ -1,0 +1,33 @@
+# ── Input / Output ───────────────────────────────────────────────────────────
+dataset_dir: null
+storage_dir: SPRM_output/gillespie_event
+dataset:     null
+
+# ── Nucleosome parameters ────────────────────────────────────────────────────
+k_wrap:        1.0
+binding_sites: 14
+
+# ── Protamine parameters ─────────────────────────────────────────────────────
+prot_k_unbind:      89.7
+prot_k_bind:        1.0
+prot_p_conc:        100.0
+prot_cooperativity: 4.5
+
+# ── Time / sampling ──────────────────────────────────────────────────────────
+tau_max:           50000.0
+n_survival_points: 1000
+
+# ── Simulation behavior ──────────────────────────────────────────────────────
+inf_protamine: true
+replicates:    100
+
+# ── Execution ────────────────────────────────────────────────────────────────
+batch_size:  1
+n_workers:   20
+flush_every: 10000
+
+# ── Output ───────────────────────────────────────────────────────────────────
+save_trajectories: true
+
+# ── Testing ──────────────────────────────────────────────────────────────────
+max_nucs: null
