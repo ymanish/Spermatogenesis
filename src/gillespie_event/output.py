@@ -2,6 +2,7 @@
 
 import csv
 import logging
+import math
 import os
 import shutil
 from pathlib import Path
@@ -71,8 +72,7 @@ def write_batch_trajectories(rows: List[NucleosomeAggregate], path: str) -> None
             tau_arr = agg.traj_tau[r_idx]
             nclosed_arr = agg.traj_n_closed[r_idx]
             detach_tau = float(agg.detach_times[r_idx])
-            import math as _math
-            censored = bool(_math.isnan(detach_tau))
+            censored = bool(math.isnan(detach_tau))
             records.append({
                 "id": agg.id,
                 "subid": agg.subid,
