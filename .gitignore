@@ -16,6 +16,7 @@ SPRM_data/
 SPRM_output/
 latex/
 markov_output/
+docs/superpowers/
 
 # ignore egg-info directory
 **.egg-info/
