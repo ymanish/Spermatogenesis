@@ -1,7 +1,6 @@
 """Run a single replicate of the event-driven Gillespie simulator."""
 
 import copy
-from typing import Optional
 
 from src.core.gillespie_event_simulator import (
     GillespieEventSimulator,
