@@ -27,3 +27,5 @@ venv/
 **.sif
 *.lprof
 *.codex
+
+**.ipynb
