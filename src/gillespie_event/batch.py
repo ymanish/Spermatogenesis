@@ -43,10 +43,6 @@ def run_batch(
     for nuc_idx, nuc in enumerate(batch):
         results = []
         for r in range(replicates):
-            bk.WORKER_LOGGER.info(
-                "  nuc %d/%d replicate %d/%d  (id=%s, subid=%s)",
-                nuc_idx + 1, len(batch), r + 1, replicates, nuc.id, nuc.subid,
-            )
             results.append(run_single_replicate(
                 nuc=nuc,
                 replicate_num=r,
@@ -54,6 +50,12 @@ def run_batch(
                 tau_max=tau_max,
                 inf_protamine=inf_protamine,
             ))
+        # One line per nucleosome (not per replicate) keeps logs manageable
+        # on large datasets while still giving progress signal.
+        bk.WORKER_LOGGER.info(
+            "  nuc %d/%d done (id=%s, subid=%s, replicates=%d)",
+            nuc_idx + 1, len(batch), nuc.id, nuc.subid, replicates,
+        )
         aggs.append(aggregate_replicates(nuc, results, tau_grid))
 
     tmp_tsv, _writer = bk.new_batch_writer(fmt="tsv", suffix=".tsv")
