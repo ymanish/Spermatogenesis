@@ -119,10 +119,19 @@ def main():
     start = time.perf_counter()
     logger = get_logger(__name__, log_file=None, level="INFO")
 
-    # Worker scratch dir
-    tmp_dir = Path(__file__).parent.parent.parent / "temps"
-    tmp_dir.mkdir(exist_ok=True)
-    os.environ["TMPDIR"] = str(tmp_dir)
+    # Temp directory for worker scratch files.
+    # On the cluster, SLURM exports SLURM_TMPDIR and/or TMPDIR before Python
+    # launches — respect either signal and leave the environment untouched.
+    # Workers pick the right one via src.core.helper.bkeep's preference chain.
+    # Locally, neither is set, so fall back to a repo-local scratch dir.
+    existing = os.environ.get("SLURM_TMPDIR") or os.environ.get("TMPDIR")
+    if existing:
+        logger.info(f"Using existing cluster temp dir: {existing}")
+    else:
+        tmp_dir = Path(__file__).parent.parent.parent / "temps"
+        tmp_dir.mkdir(exist_ok=True)
+        os.environ["TMPDIR"] = str(tmp_dir)
+        logger.info(f"Using local temporary directory: {tmp_dir}")
 
     args = parse_args()
     cfg = _load_yaml(args.config)
