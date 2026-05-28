@@ -52,6 +52,8 @@ def save_batch_to_temp_files(detailed_data: List[Dict], parquet_path: str) -> No
             cleaned_entry['mfpt'] = float(entry['mfpt'])
         if 'mfpt_vec' in entry:
             cleaned_entry['mfpt_vec'] = entry['mfpt_vec'].tolist() if hasattr(entry['mfpt_vec'], 'tolist') else list(entry['mfpt_vec'])
+        if 'mfpt_flag' in entry:
+            cleaned_entry['mfpt_flag'] = str(entry['mfpt_flag'])
         
         cleaned_data.append(cleaned_entry)
     
@@ -159,7 +161,7 @@ def save_markov_summary_to_tsv(
         
         # Column headers
         # outfile.write("id\tsubid\tmfpt\thalf_life\tfinal_survival\tmean_survival\n")
-        outfile.write("id\tsubid\tmfpt\n")
+        outfile.write("id\tsubid\tmfpt\tmfpt_flag\n")
 
         
         # Merge data from temp files

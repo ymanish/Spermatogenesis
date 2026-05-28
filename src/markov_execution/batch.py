@@ -99,11 +99,12 @@ def run_batch_markov(
             results['id'],
             results['subid'],
             results['mfpt'],
+            results.get('mfpt_flag', 'ok'),
             # derived['half_life'],
             # derived['final_survival'],
             # derived['mean_survival']
         ])
-        
+
         # Store detailed data for Parquet
         if save_survival or save_states:
             detailed_entry = {
@@ -112,15 +113,16 @@ def run_batch_markov(
                 'tau_grid': results['tau_grid'],
                 'survival': results['survival']
             }
-            
+
             if save_states and 'state_probs' in results:
                 detailed_entry['state_probs'] = results['state_probs']
                 detailed_entry['states'] = results['states']
-            
+
             if save_mfpt:
                 detailed_entry['mfpt'] = results['mfpt']
                 detailed_entry['mfpt_vec'] = results['mfpt_vec']
-            
+                detailed_entry['mfpt_flag'] = results.get('mfpt_flag', 'ok')
+
             detailed_data.append(detailed_entry)
 
     # Save detailed data to Parquet if requested

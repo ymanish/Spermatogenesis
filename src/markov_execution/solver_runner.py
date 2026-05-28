@@ -89,8 +89,8 @@ def solve_single_nucleosome(
         P_states = None
     
     # Compute MFPT
-    mfpt, tau_vec = compute_mfpt_from_Q_TT(Q_TT, state_index, start_state)
-    
+    mfpt, tau_vec, mfpt_flag = compute_mfpt_from_Q_TT(Q_TT, state_index, start_state)
+
     # Package results
     results = {
         'id': nuc.id,
@@ -98,6 +98,7 @@ def solve_single_nucleosome(
         'survival': S,
         'mfpt': mfpt,
         'mfpt_vec': tau_vec,
+        'mfpt_flag': mfpt_flag,
         'tau_grid': tau_grid
     }
     

@@ -376,7 +376,7 @@ def compute_markov_survival(
         )
         
         # Compute MFPT
-        mfpt, _ = compute_mfpt_from_Q_TT(Q_TT, state_index, start_state)
+        mfpt, _, _ = compute_mfpt_from_Q_TT(Q_TT, state_index, start_state)
         print(f"    MFPT: {mfpt:.2f} τ ({mfpt/nuc.k_wrap:.4f} sec)")
         
         # Store results

@@ -15,11 +15,11 @@ binding_sites: 14
 # ── Protamine parameters ─────────────────────────────────────────────────────
 prot_k_unbind: 89.7
 prot_k_bind: 1.0
-prot_p_conc: 100.0
-prot_cooperativity: 4.5
+prot_p_conc: 10.0
+prot_cooperativity: 0.0
 
 # ── Computation ───────────────────────────────────────────────────────────────
-tau_max: 1000.0            # maximum dimensionless time
+tau_max: 10000.0            # maximum dimensionless time
 tau_steps: 500             # number of time-sample points
 method: ode                # solver method: expm or ode (ode is faster)
 sparse: false

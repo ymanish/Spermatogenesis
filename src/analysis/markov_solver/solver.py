@@ -73,8 +73,8 @@ def solve_Q_TT_complete(
     k_wrap_val = k_wrap if k_wrap is not None else nucleosome.k_wrap
     
     # Compute MFPT
-    mfpt, mfpt_vector = compute_mfpt_from_Q_TT(Q_TT, state_index, start_state)
-    
+    mfpt, mfpt_vector, mfpt_flag = compute_mfpt_from_Q_TT(Q_TT, state_index, start_state)
+
     # Compute survival function
     tau_grid = np.linspace(0, tau_max, n_points)
     survival = compute_survival(Q_TT, state_index, start_state, tau_grid, method)
@@ -84,6 +84,7 @@ def solve_Q_TT_complete(
         'Q_TT': Q_TT,
         'mfpt': mfpt,
         'mfpt_vector': mfpt_vector,
+        'mfpt_flag': mfpt_flag,
         'tau_grid': tau_grid,
         'survival': survival,
         'k_wrap': k_wrap_val,

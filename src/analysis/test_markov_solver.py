@@ -141,7 +141,7 @@ def main():
     print("\n[4] Computing Mean First Passage Time (MFPT)...")
     
     start_state = (0, 0)
-    mfpt, tau_vec = compute_mfpt_from_Q_TT(Q_TT, state_index, start_state)
+    mfpt, tau_vec, _ = compute_mfpt_from_Q_TT(Q_TT, state_index, start_state)
     
     print(f"   ✓ Starting from state: {start_state}")
     print(f"   ✓ MFPT (dimensionless) : {mfpt:.4f}")
