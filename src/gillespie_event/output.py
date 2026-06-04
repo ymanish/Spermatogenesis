@@ -11,6 +11,7 @@ from typing import List, Optional
 import pandas as pd
 import polars as pl
 import pyarrow as pa
+import pyarrow.parquet as pq
 
 from src.gillespie_event.aggregate import NucleosomeAggregate
 
@@ -45,6 +46,21 @@ def write_batch_tsv(rows: List[NucleosomeAggregate], path: str) -> None:
             writer.writerow(_tsv_row(agg))
 
 
+# Explicit schema so per-file Arrow type inference is deterministic. Without
+# this, a batch where every replicate is censored has an all-NaN detach_times
+# column that pyarrow infers as list<null> instead of list<double>, which then
+# fails the schema-equality check in the final vertical concat (_merge_parquet).
+SURVIVAL_SCHEMA = pa.schema([
+    ("id", pa.string()),
+    ("subid", pa.int64()),
+    ("tau_grid", pa.list_(pa.float64())),
+    ("survival", pa.list_(pa.float64())),
+    ("detach_times", pa.list_(pa.float64())),
+    ("n_replicates", pa.int64()),
+    ("censored_fraction", pa.float64()),
+])
+
+
 def write_batch_survival(rows: List[NucleosomeAggregate], path: str) -> None:
     pa.set_cpu_count(1)
     pa.set_io_thread_count(1)
@@ -59,8 +75,8 @@ def write_batch_survival(rows: List[NucleosomeAggregate], path: str) -> None:
             "n_replicates": agg.n_replicates,
             "censored_fraction": agg.censored_fraction,
         })
-    df = pd.DataFrame(records)
-    df.to_parquet(path, engine="pyarrow", compression="snappy")
+    table = pa.Table.from_pylist(records, schema=SURVIVAL_SCHEMA)
+    pq.write_table(table, path, compression="snappy")
 
 
 def write_batch_trajectories(rows: List[NucleosomeAggregate], path: str) -> None:
@@ -105,9 +121,12 @@ def _merge_tsv(temp_paths: List[str], out: Path) -> None:
 
 def _merge_parquet(temp_paths: List[str], out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
+    # "vertical_relaxed" coerces to a common supertype across files (e.g.
+    # List(Null) from an all-censored batch + List(Float64) from a batch with
+    # detachments), instead of erroring on the schema mismatch.
     df_lazy = pl.concat(
         [pl.scan_parquet(p) for p in temp_paths],
-        how="vertical",
+        how="vertical_relaxed",
     )
     df_lazy.sink_parquet(out)
     for p in temp_paths:
