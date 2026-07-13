@@ -70,7 +70,7 @@ if [ -z "$ROW" ]; then
     exit 1
 fi
 
-IFS=$'\t' read -r TASK_ID DATASET_NAME DATASET_DIR STORAGE_DIR PROT_P_CONC PROT_COOPERATIVITY <<< "$ROW"
+IFS=$'\t' read -r TASK_ID DATASET_NAME DATASET_DIR STORAGE_DIR PROT_P_CONC PROT_COOPERATIVITY PROT_K_BIND PROT_K_UNBIND PROT_K_BIND_PHYS <<< "$ROW"
 
 echo ""
 echo "--- Task parameters ---"
@@ -80,6 +80,8 @@ echo "dataset_dir:         $DATASET_DIR"
 echo "storage_dir:         $STORAGE_DIR"
 echo "prot_p_conc:         $PROT_P_CONC"
 echo "prot_cooperativity:  $PROT_COOPERATIVITY"
+echo "prot_k_bind (run):   $PROT_K_BIND   (k_bind_phys=$PROT_K_BIND_PHYS uM^-1 s^-1)"
+echo "prot_k_unbind (run): $PROT_K_UNBIND"
 echo ""
 
 if [ ! -d "$DATASET_DIR" ]; then
@@ -105,6 +107,8 @@ singularity exec \
         --storage_dir "$STORAGE_DIR" \
         --prot_p_conc "$PROT_P_CONC" \
         --prot_cooperativity "$PROT_COOPERATIVITY" \
+        --prot_k_bind "$PROT_K_BIND" \
+        --prot_k_unbind "$PROT_K_UNBIND" \
         --n_workers "$SLURM_NTASKS"
 
 EXIT_CODE=$?

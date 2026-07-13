@@ -2,13 +2,20 @@
 #
 # Consumed by:
 #   - cluster_sim_scripts/gillespie_event/generate_sweep_grid.py
-#         reads: sprm_root, storage_root, sweep.{datasets, prot_p_conc, prot_cooperativity}
+#         reads: sprm_root, storage_root, k_wrap_phys, prot_c0,
+#                sweep.{datasets, prot_p_conc, prot_cooperativity, prot_k_bind_phys}
 #   - src.gillespie_event.cli via --config (from launch_gillespie_event_sweep.job)
 #         reads: all top-level pipeline keys (k_wrap, tau_max, replicates, ...)
-#         silently ignores: sprm_root, storage_root, sweep
+#         silently ignores: sprm_root, storage_root, k_wrap_phys, prot_c0, sweep
 #
 # Per-task overrides supplied by launch_gillespie_event_sweep.job from sweep_grid.tsv:
-#   --dataset_dir, --storage_dir, --prot_p_conc, --prot_cooperativity, --n_workers
+#   --dataset_dir, --storage_dir, --prot_p_conc, --prot_cooperativity,
+#   --prot_k_bind, --prot_k_unbind, --n_workers
+#
+# This sweep is the Gillespie VALIDATION counterpart to the Markov solver sweep:
+# it matches the Markov concentration/cooperativity grid and log tau grid, and
+# sweeps the protamine on-rate k_bind to show the survival curve converging onto
+# the Markov fast-protamine limit as k_bind increases (see notes/fast_protamine_review.md).
 #
 # Workflow (sweep_grid.tsv is a COMMITTED artifact — regenerate locally):
 #   # locally (laptop/workstation with python3 + pyyaml):
@@ -21,37 +28,64 @@
 
 # ── Sweep specification (read by generate_sweep_grid.py) ─────────────────────
 sprm_root: /group/pol_schiessel/Manish/HAMNucRetSeq_pipeline/SPRM_data
-storage_root: /group/pol_schiessel/Manish/Spermatogensis/output/gillespie_event_sweep_stable147
+storage_root: /group/pol_schiessel/Manish/Spermatogensis/output/gillespie_event_sweep_stable147_v1
 
 sweep:
   datasets:
     - ctrl01_random_genome_safe_stable147_refined
-    - ctrl02_random_genome_gcmatched_stable147_refined
-    - ctrl03_som_gcmatched_stable147_refined
+    # - ctrl02_random_genome_gcmatched_stable147_refined
+    # - ctrl03_som_gcmatched_stable147_refined
     - ctrl04_bound_prom_evicted_stable147_refined
     - ctrl05_unbound_prom_yazdi_stable147_refined
     - ret_all_stable147_refined
 
-  prot_p_conc:        [0.0, 0.01, 0.1, 1.0, 10.0, 100.0, 500.0, 1000.0]
+  # Match the Markov sweep grid exactly (markov_sweep.yaml).
+  prot_p_conc:        [0.0, 0.01, 0.1, 1.0, 3.0, 10.0, 100.0, 1000.0]
   prot_cooperativity: [0.0, 4.5]
+
+  # Fast-protamine convergence ladder: PHYSICAL on-rate k_bind (uM^-1 s^-1).
+  # generate_sweep_grid.py converts each to the dimensionless run rate
+  # k_bind_run = k_bind_phys / k_wrap_phys (the pipeline runs at k_wrap=1) and
+  # sets k_unbind_run = prot_c0 * k_bind_run, so the EMSA equilibrium
+  # c0 = k_unbind/k_bind stays fixed while the kinetics speed up toward the fast
+  # limit. Anchor at 100 (electrostatic ~1e8 M^-1 s^-1); convergence is expected
+  # to be essentially complete by 100 (c_min ~ 2 uM << the concentration window).
+  # At prot_p_conc = 0 there is no protamine, so the ladder collapses to a single
+  # run (k_bind is irrelevant) — handled by generate_sweep_grid.py.
+  prot_k_bind_phys:   [1.0, 10.0, 100.0]
+
+# The single physical rate for this pipeline (read by generate_sweep_grid.py,
+# ignored by the CLI). k_wrap_phys is the nucleosome edge rewrapping rate
+# (Tims et al. 2011, ~21/s); prot_c0 = k_unbind/k_bind fixed by the EMSA fit.
+# The simulator itself runs in DIMENSIONLESS time tau = k_wrap_phys * t, i.e. its
+# own k_wrap = k_wrap_phys/k_wrap_phys = 1 (the CLI default) — which is why no
+# separate top-level `k_wrap` is set below. This matches the k_wrap-invariant
+# Markov survival grid. k_wrap_phys is used only to convert the k_bind ladder.
+k_wrap_phys: 21.0
+prot_c0:     89.7
 
 # ── Gillespie-event defaults (read by the CLI via --config) ──────────────────
 # Per-task values are supplied by the .job script — left null here.
 dataset_dir: null
 storage_dir: null
 
-# Nucleosome parameters
-k_wrap:        1.0
+# Nucleosome parameters. (k_wrap is intentionally omitted -> CLI default 1.0, the
+# dimensionless run; see k_wrap_phys above for the physical rate.)
 binding_sites: 14
 
-# Protamine kinetics (prot_p_conc / prot_cooperativity live inside `sweep`
-# and are passed per-task by the .job — not declared at top level here.)
+# Protamine kinetics — OVERRIDDEN PER TASK by the .job (prot_k_bind / prot_k_unbind
+# come from the ladder in `sweep`, already converted to dimensionless run rates).
+# The values below are only fallbacks for a bare local run.
 prot_k_unbind: 89.7
 prot_k_bind:   1.0
 
-# Time / sampling
-tau_max:           10000.0
+# Time / sampling — match the Markov log tau grid. tau_max is a censoring
+# boundary; reachable nucleosomes (Markov MFPT below the sampling cap) evict well
+# before it, so 20000 comfortably captures the decay while bounding stragglers.
+tau_max:           20000.0
 n_survival_points: 1000
+tau_spacing:       log
+tau_log_min:       0.01
 
 # Simulation behavior
 inf_protamine: true
