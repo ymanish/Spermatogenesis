@@ -21,6 +21,8 @@ prot_cooperativity: 0.0
 # ── Computation ───────────────────────────────────────────────────────────────
 tau_max: 10000.0            # maximum dimensionless time
 tau_steps: 500             # number of time-sample points
+tau_spacing: log           # survival-curve tau grid: 'log' or 'linear' (MFPT unaffected)
+tau_log_min: 0.01          # smallest nonzero tau on the log grid (ignored when linear)
 method: ode                # solver method: expm or ode (ode is faster)
 sparse: false
 
@@ -35,5 +37,3 @@ save_mfpt: true
 
 # ── Testing / debugging (leave null for full production runs) ─────────────────
 max_nucs: 100             # limit total nucleosomes processed
-subids_start: null         # old-format only: start subid (inclusive)
-subids_end: null           # old-format only: end subid (exclusive)

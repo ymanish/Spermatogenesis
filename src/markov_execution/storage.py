@@ -93,6 +93,8 @@ class MarkovStorage:
             'k_wrap': params.get('k_wrap'),
             'tau_max': params.get('tau_max'),
             'tau_steps': params.get('tau_steps'),
+            'tau_spacing': params.get('tau_spacing'),
+            'tau_log_min': params.get('tau_log_min'),
             'method': params.get('method'),
             'prot_params': params.get('prot_params'),
             'binding_sites': params.get('binding_sites'),
@@ -125,9 +127,10 @@ class MarkovStorage:
             f"p{prot.get('p_conc', 0.0):.1f}",
             f"c{prot.get('cooperativity', 0.0):.1f}",
             f"tau{int(params.get('tau_max', 1000))}",
+            params.get('tau_spacing', 'linear'),
             params.get('method', 'expm')
         ]
-        
+
         return "_".join(parts)
     
     def get_directory_name(self, params: dict) -> str:
