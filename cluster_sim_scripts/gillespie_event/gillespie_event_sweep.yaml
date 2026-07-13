@@ -36,10 +36,9 @@ sweep:
   prot_cooperativity: [0.0, 4.5]
 
 # ── Gillespie-event defaults (read by the CLI via --config) ──────────────────
-# Per-task values are supplied by the .job script — left null/omitted here.
+# Per-task values are supplied by the .job script — left null here.
 dataset_dir: null
 storage_dir: null
-dataset:     null
 
 # Nucleosome parameters
 k_wrap:        1.0

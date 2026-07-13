@@ -6,9 +6,6 @@ tau_max is a censoring boundary, n_survival_points only controls the empirical
 S(tau) grid resolution.
 """
 
-import numpy as np
-
-
 class GillespieEventConfig:
 
     def __init__(
@@ -70,7 +67,9 @@ class GillespieEventConfig:
 
         self.save_trajectories = save_trajectories
 
-        self.tau_grid = np.linspace(0.0, tau_max, n_survival_points)
+        # NOTE: the survival-curve tau grid is NOT built here. The worker
+        # (src/gillespie_event/batch.py) recomputes it from tau_max /
+        # n_survival_points so the grid never has to cross the process boundary.
         self.prot_params = {
             "k_unbind": prot_k_unbind,
             "k_bind": prot_k_bind,
