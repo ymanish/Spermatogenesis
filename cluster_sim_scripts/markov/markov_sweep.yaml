@@ -21,7 +21,7 @@
 
 # ── Sweep specification (read by generate_sweep_grid.py) ─────────────────────
 sprm_root: /group/pol_schiessel/Manish/HAMNucRetSeq_pipeline/SPRM_data
-storage_root: /group/pol_schiessel/Manish/Spermatogensis/output/markov_sweep_stable147
+storage_root: /group/pol_schiessel/Manish/Spermatogensis/output/markov_sweep_stable147_v1
 
 sweep:
   datasets:
@@ -58,7 +58,7 @@ prot_k_bind: 1.0
 
 # Computation
 tau_max: 100000.0
-tau_steps: 5000
+tau_steps: 1000
 # Survival-curve tau grid: 'log' concentrates points where S(tau) drops and is
 # sparse in the smooth tail (better shape + Gillespie comparison at far fewer
 # points); 'linear' for uniform spacing. Does NOT affect the MFPT (a direct
