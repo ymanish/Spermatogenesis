@@ -82,6 +82,10 @@ def parse_args():
                         help="Maximum dimensionless time tau.")
     parser.add_argument("--tau_steps", type=int, default=None,
                         help="Number of tau sample points.")
+    parser.add_argument("--tau_spacing", type=str, choices=["linear", "log"], default=None,
+                        help="Survival-curve tau grid spacing (does not affect MFPT).")
+    parser.add_argument("--tau_log_min", type=float, default=None,
+                        help="Smallest nonzero tau for the log grid (ignored when linear).")
     parser.add_argument("--method", type=str, choices=["expm", "ode"], default=None,
                         help="Solver method.")
     parser.add_argument("--sparse", action="store_true", default=None,
@@ -97,10 +101,6 @@ def parse_args():
     parser.add_argument("--save_survival", action="store_true", default=None)
     parser.add_argument("--save_states", action="store_true", default=None)
     parser.add_argument("--save_mfpt", action="store_true", default=None)
-
-    # Testing / debugging
-    parser.add_argument("--subids_start", type=int, default=None)
-    parser.add_argument("--subids_end", type=int, default=None)
 
     return parser.parse_args()
 
@@ -151,6 +151,8 @@ def resolve_params(args, cfg: dict) -> dict:
         'prot_cooperativity': pick(args.prot_cooperativity,      'prot_cooperativity', 0.0),
         'tau_max':            pick(args.tau_max,                 'tau_max',            1000.0),
         'tau_steps':          pick(args.tau_steps,               'tau_steps',          500),
+        'tau_spacing':        pick(args.tau_spacing,             'tau_spacing',        'linear'),
+        'tau_log_min':        pick(args.tau_log_min,             'tau_log_min',        1e-2),
         'method':             pick(args.method,                  'method',             'expm'),
         'sparse':             pick_bool(args.sparse,             'sparse',             False),
         'batch_size':         pick(args.batch_size,              'batch_size',         10),
@@ -159,8 +161,6 @@ def resolve_params(args, cfg: dict) -> dict:
         'save_survival':      pick_bool(args.save_survival,      'save_survival',      True),
         'save_states':        pick_bool(args.save_states,        'save_states',        False),
         'save_mfpt':          pick_bool(args.save_mfpt,          'save_mfpt',          True),
-        'subids_start':       pick(args.subids_start,            'subids_start'),
-        'subids_end':         pick(args.subids_end,              'subids_end'),
     }
 
 
@@ -212,6 +212,8 @@ def main():
         prot_cooperativity=p['prot_cooperativity'],
         tau_max=p['tau_max'],
         tau_steps=p['tau_steps'],
+        tau_spacing=p['tau_spacing'],
+        tau_log_min=p['tau_log_min'],
         method=p['method'],
         sparse=p['sparse'],
         batch_size=p['batch_size'],
@@ -238,6 +240,8 @@ def main():
         'binding_sites': config.binding_sites,
         'tau_max':       config.tau_max,
         'tau_steps':     config.tau_steps,
+        'tau_spacing':   config.tau_spacing,
+        'tau_log_min':   config.tau_log_min,
         'method':        config.method,
         'sparse':        config.sparse,
         'dimensionless': config.dimensionless,
@@ -260,12 +264,6 @@ def main():
 
     logger.info(f"Configuration: {config}")
 
-    subids_range = (
-        (p['subids_start'], p['subids_end'])
-        if p['subids_start'] is not None and p['subids_end'] is not None
-        else None
-    )
-
     # ── Run ───────────────────────────────────────────────────────────────────
     run_markov_solver(
         tsv_outfile=tsv_outfile,
@@ -275,7 +273,6 @@ def main():
         dataset_dir=p['dataset_dir'],
         logger=logger,
         max_nucs=p['max_nucs'],
-        subids_range=subids_range,
     )
 
     elapsed = time.perf_counter() - start

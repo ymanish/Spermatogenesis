@@ -87,8 +87,10 @@ class MarkovConfig:
     prot_cooperativity: float = 0.0
     
     # Computation parameters
-    tau_max: float = 1000.0 
+    tau_max: float = 1000.0
     tau_steps: int = 500
+    tau_spacing: str = 'linear'   # 'linear' or 'log' (survival-curve τ grid)
+    tau_log_min: float = 1e-2     # smallest nonzero τ for the log grid (ignored when linear)
     method: str = 'expm'  # 'expm' or 'ode'
     sparse: bool = False
     compute_states: bool = False
@@ -108,8 +110,8 @@ class MarkovConfig:
     def __post_init__(self):
         """Compute derived attributes after initialization."""
         # Time grid (dimensionless τ)
-        self.tau_grid = np.linspace(0, self.tau_max, self.tau_steps)
-        
+        self.tau_grid = self._build_tau_grid()
+
         # Protamine parameters dictionary
         self.protamine_params = {
             'k_bind': self.prot_k_bind,
@@ -120,7 +122,38 @@ class MarkovConfig:
         
         # Validate parameters
         self._validate()
-    
+
+    def _build_tau_grid(self) -> np.ndarray:
+        """Build the dimensionless-time evaluation grid for the survival curve.
+
+        'linear' — uniform spacing on [0, tau_max]; simple, but wastes points in
+                   the flat tail while under-resolving the steep early decay.
+        'log'    — τ=0 followed by log-spaced points on [tau_log_min, tau_max];
+                   dense where S(τ) drops, sparse in the smooth exponential tail.
+                   Preferred for MFPT-agnostic survival shape and for matching a
+                   Gillespie empirical survival where it has statistical power.
+
+        Note: the MFPT is a direct linear solve and does NOT depend on this grid;
+        tau_spacing/tau_steps only affect the saved survival curve.
+        """
+        if self.tau_spacing == 'linear':
+            return np.linspace(0, self.tau_max, self.tau_steps)
+        if self.tau_spacing == 'log':
+            if self.tau_steps < 2:
+                raise ValueError(
+                    f"log tau_spacing needs tau_steps >= 2, got {self.tau_steps}")
+            if not (0 < self.tau_log_min < self.tau_max):
+                raise ValueError(
+                    f"log tau_spacing needs 0 < tau_log_min < tau_max, got "
+                    f"tau_log_min={self.tau_log_min}, tau_max={self.tau_max}")
+            return np.concatenate((
+                [0.0],
+                np.logspace(np.log10(self.tau_log_min), np.log10(self.tau_max),
+                            self.tau_steps - 1),
+            ))
+        raise ValueError(
+            f"tau_spacing must be 'linear' or 'log', got {self.tau_spacing!r}")
+
     def _validate(self):
         """Validate configuration parameters."""
         if self.k_wrap <= 0:
@@ -165,6 +198,8 @@ class MarkovConfig:
             'prot_cooperativity': self.prot_cooperativity,
             'tau_max': self.tau_max,
             'tau_steps': self.tau_steps,
+            'tau_spacing': self.tau_spacing,
+            'tau_log_min': self.tau_log_min,
             'method': self.method,
             'sparse': self.sparse,
             'n_workers': self.n_workers,

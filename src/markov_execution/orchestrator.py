@@ -11,7 +11,6 @@ Date: 2025-12-11
 import os
 import itertools
 import concurrent.futures
-import numpy as np
 from pathlib import Path
 from tqdm import tqdm
 from typing import Optional
@@ -33,7 +32,6 @@ def run_markov_solver(
     dataset_dir: Optional[Path] = None,
     logger: Optional[logging.Logger] = None,
     max_nucs: Optional[int] = None,
-    subids_range: Optional[tuple] = None
 ) -> None:
     """
     Run Markov solver on multiple nucleosomes using parallelization.
@@ -50,7 +48,6 @@ def run_markov_solver(
         dataset_dir: SPRM dataset directory (mutually exclusive with file_path)
         logger: Logger instance (created if None)
         max_nucs: Maximum number of nucleosomes to process (None = all)
-        subids_range: Tuple (start, end) for subid filtering; ignored for SPRM input
 
     Output Files:
         - Summary TSV: MFPT, half-life, final survival, mean survival
@@ -93,19 +90,11 @@ def run_markov_solver(
             binding_sites=config.binding_sites,
         )
     else:
-        if subids_range is not None:
-            gen = nucleosome_generator(
-                file_path=file_path,
-                k_wrap=config.k_wrap,
-                binding_sites=config.binding_sites,
-                subids=np.arange(*subids_range).tolist(),
-            )
-        else:
-            gen = nucleosome_generator(
-                file_path=file_path,
-                k_wrap=config.k_wrap,
-                binding_sites=config.binding_sites,
-            )
+        gen = nucleosome_generator(
+            file_path=file_path,
+            k_wrap=config.k_wrap,
+            binding_sites=config.binding_sites,
+        )
     
     # Limit number of nucleosomes if requested
     max_nucs = max_nucs if max_nucs is not None else config.max_nucs
