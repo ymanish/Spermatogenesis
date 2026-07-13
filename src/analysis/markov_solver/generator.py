@@ -174,15 +174,13 @@ def build_full_Q_from_nucleosome(
                 i = state_index[(lR, rR)]
                 Q_full[i, j] += rate
                 total_out += rate
-
-        elif lR + rR >= N:
-            F_new = 0.0
-            dF = F_new - F_curr
-            rate = k_close_bare * np.exp(-dF / kT_val)
-            # rate = max(rate, 1e-300)
-            if rate > 0.0:
-                Q_full[abs_index, j] += rate
-                total_out += rate
+        # NOTE: intentionally NO "OPEN RIGHT -> absorbing" branch here.
+        # When l + r == N - 1 there is a single remaining wrapped contact, and both
+        # "open left" and "open right" describe that same contact releasing
+        # (leftmost-wrapped == rightmost-wrapped). The OPEN LEFT block above already
+        # adds that single absorbing transition; adding it again here would
+        # double-count the final eviction rate. Mirrors the Gillespie's
+        # `if left != right` guard in Nucleosome.unwrapping()/rewrapping().
 
         # Diagonal
         Q_full[j, j] -= total_out
