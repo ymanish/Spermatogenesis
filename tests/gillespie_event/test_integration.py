@@ -42,7 +42,7 @@ def test_full_pipeline_runs_on_tiny_slice(tmp_path, monkeypatch):
         prot_p_conc=0.0,
         prot_cooperativity=0.0,
         tau_max=200.0,
-        n_survival_points=51,
+        tau_steps=51,
         inf_protamine=True,
         replicates=3,
         batch_size=1,
@@ -86,7 +86,7 @@ def test_full_pipeline_runs_on_tiny_slice(tmp_path, monkeypatch):
     for col in ["id", "subid", "tau_grid", "survival",
                 "detach_times", "n_replicates", "censored_fraction"]:
         assert col in df_surv.columns
-    # tau_grid + survival lengths match n_survival_points
+    # tau_grid + survival lengths match tau_steps
     for _, row in df_surv.iterrows():
         assert len(row["tau_grid"]) == 51
         assert len(row["survival"]) == 51

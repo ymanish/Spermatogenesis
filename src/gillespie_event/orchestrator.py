@@ -41,6 +41,9 @@ def run_gillespie_event(
         "prot_params": config.prot_params,
         "binding_sites": config.binding_sites,
         "tau_max": config.tau_max,
+        "tau_steps": config.tau_steps,
+        "tau_spacing": config.tau_spacing,
+        "tau_log_min": config.tau_log_min,
         "inf_protamine": config.inf_protamine,
         # Add a marker so the hash differs from the old grid-based pipeline
         "pipeline": "gillespie_event",
@@ -70,10 +73,12 @@ def run_gillespie_event(
         run_batch,
         prot_params=config.prot_params,
         tau_max=config.tau_max,
-        n_survival_points=config.n_survival_points,
+        tau_steps=config.tau_steps,
         inf_protamine=config.inf_protamine,
         replicates=config.replicates,
         save_trajectories=config.save_trajectories,
+        tau_spacing=config.tau_spacing,
+        tau_log_min=config.tau_log_min,
     )
 
     tmp_tsvs, tmp_survs, tmp_trajs = [], [], []

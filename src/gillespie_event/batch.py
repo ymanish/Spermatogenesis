@@ -6,12 +6,12 @@ import datetime as dt
 import os
 from typing import List, Optional, Tuple
 
-import numpy as np
 import psutil
 
 from src.core.helper import bkeep as bk
 from src.core.nucleosomes import Nucleosome
 from src.gillespie_event.aggregate import aggregate_replicates
+from src.gillespie_event.config import build_tau_grid
 from src.gillespie_event.output import (
     write_batch_tsv,
     write_batch_survival,
@@ -24,10 +24,12 @@ def run_batch(
     batch: List[Nucleosome],
     prot_params: dict,
     tau_max: float,
-    n_survival_points: int,
+    tau_steps: int,
     inf_protamine: bool,
     replicates: int,
     save_trajectories: bool,
+    tau_spacing: str = "linear",
+    tau_log_min: float = 1e-2,
 ) -> Tuple[str, str, Optional[str]]:
     """Return (tmp_tsv_path, tmp_survival_path, tmp_traj_path_or_None)."""
     start = dt.datetime.now()
@@ -37,7 +39,7 @@ def run_batch(
         len(batch), replicates,
     )
 
-    tau_grid = np.linspace(0.0, tau_max, n_survival_points)
+    tau_grid = build_tau_grid(tau_max, tau_steps, tau_spacing, tau_log_min)
 
     aggs = []
     for nuc_idx, nuc in enumerate(batch):
