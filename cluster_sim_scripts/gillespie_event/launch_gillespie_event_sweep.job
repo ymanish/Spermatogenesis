@@ -70,7 +70,7 @@ if [ -z "$ROW" ]; then
     exit 1
 fi
 
-IFS=$'\t' read -r TASK_ID DATASET_NAME DATASET_DIR STORAGE_DIR PROT_P_CONC PROT_COOPERATIVITY PROT_K_BIND PROT_K_UNBIND PROT_K_BIND_PHYS <<< "$ROW"
+IFS=$'\t' read -r TASK_ID DATASET_NAME DATASET_DIR STORAGE_DIR PROT_P_CONC PROT_COOPERATIVITY PROT_K_BIND PROT_K_UNBIND PROT_K_BIND_PHYS GLOBAL_IDS_FILE <<< "$ROW"
 
 echo ""
 echo "--- Task parameters ---"
@@ -82,10 +82,17 @@ echo "prot_p_conc:         $PROT_P_CONC"
 echo "prot_cooperativity:  $PROT_COOPERATIVITY"
 echo "prot_k_bind (run):   $PROT_K_BIND   (k_bind_phys=$PROT_K_BIND_PHYS uM^-1 s^-1)"
 echo "prot_k_unbind (run): $PROT_K_UNBIND"
+echo "global_ids_file:     $GLOBAL_IDS_FILE"
 echo ""
 
 if [ ! -d "$DATASET_DIR" ]; then
     echo "ERROR: dataset directory not found: $DATASET_DIR"
+    exit 1
+fi
+
+if [ ! -f "$GLOBAL_IDS_FILE" ]; then
+    echo "ERROR: reachable id-list not found: $GLOBAL_IDS_FILE"
+    echo "Run select_reachable_ids.py (after the Markov sweep) before submitting."
     exit 1
 fi
 
@@ -109,6 +116,7 @@ singularity exec \
         --prot_cooperativity "$PROT_COOPERATIVITY" \
         --prot_k_bind "$PROT_K_BIND" \
         --prot_k_unbind "$PROT_K_UNBIND" \
+        --global_ids_file "$GLOBAL_IDS_FILE" \
         --n_workers "$SLURM_NTASKS"
 
 EXIT_CODE=$?

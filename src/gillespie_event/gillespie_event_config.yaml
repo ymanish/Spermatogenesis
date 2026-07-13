@@ -38,5 +38,11 @@ flush_every: 10000
 # ── Output ───────────────────────────────────────────────────────────────────
 save_trajectories: true
 
+# ── Nucleosome subset (optional) ─────────────────────────────────────────────
+# Text file of nucleosome global_ids (one per line) to restrict the run to.
+# Used by the Markov-validation sweep to run only reachable nucleosomes; the
+# cluster .job sets it per task. Leave null for a full local run.
+global_ids_file: null
+
 # ── Testing ──────────────────────────────────────────────────────────────────
 max_nucs: 20

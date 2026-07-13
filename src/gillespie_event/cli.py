@@ -66,6 +66,10 @@ def parse_args():
                    help="Disable trajectory saving (overrides YAML).")
 
     p.add_argument("--max_nucs", type=int, default=None)
+    p.add_argument("--global_ids_file", type=Path, default=None,
+                   help="Text file of nucleosome global_ids (one per line) to "
+                        "restrict the run to — e.g. a reachable id-list from "
+                        "cluster_sim_scripts/gillespie_event/select_reachable_ids.py.")
     return p.parse_args()
 
 
@@ -118,7 +122,24 @@ def _resolve(args, cfg: dict) -> dict:
         "flush_every":         pick(args.flush_every, "flush_every", 10000),
         "save_trajectories":   pick_bool(args.save_trajectories, "save_trajectories", True),
         "max_nucs":            pick(args.max_nucs, "max_nucs"),
+        "global_ids_file":     pick_path(args.global_ids_file, "global_ids_file"),
     }
+
+
+def _load_global_ids(path):
+    """Read a one-global_id-per-line text file into a list of ints (order preserved)."""
+    if path is None:
+        return None
+    if not path.exists():
+        raise SystemExit(f"global_ids_file not found: {path}")
+    ids = []
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            ids.append(int(line))
+    if not ids:
+        raise SystemExit(f"global_ids_file is empty: {path}")
+    return ids
 
 
 def main():
@@ -172,12 +193,15 @@ def main():
         save_trajectories=p["save_trajectories"],
     )
 
+    global_ids = _load_global_ids(p["global_ids_file"])
+
     run_gillespie_event(
         dataset_dir=p["dataset_dir"],
         storage_dir=p["storage_dir"],
         config=config,
         dataset_label=p["dataset"],
         max_nucs=p["max_nucs"],
+        global_ids=global_ids,
         logger=logger,
     )
 

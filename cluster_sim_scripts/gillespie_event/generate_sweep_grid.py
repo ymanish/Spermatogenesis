@@ -20,8 +20,9 @@ from pathlib import Path
 
 import yaml
 
-
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+from sampling_paths import ids_relpath  # noqa: E402
 
 
 def main():
@@ -54,6 +55,12 @@ def main():
     k_wrap_phys = float(cfg["k_wrap_phys"])
     c0 = float(cfg["prot_c0"])
 
+    # Reachable-nucleosome id-lists (written by select_reachable_ids.py). Each row
+    # points at the id-list for its (dataset, conc, coop) cell; the k_bind ladder
+    # reuses the same list (MFPT depends only on the fixed c0). Path is resolved on
+    # the cluster at run time by the .job; we only need to emit it here.
+    ids_root = Path(cfg["ids_root"])
+
     if args.no_validate:
         print(f"WARN: --no-validate set; not checking that dataset_dirs exist under {sprm_root}",
               file=sys.stderr)
@@ -84,14 +91,16 @@ def main():
 
     with open(args.output, "w") as f:
         f.write("task_id\tdataset_name\tdataset_dir\tstorage_dir\tprot_p_conc\t"
-                "prot_cooperativity\tprot_k_bind\tprot_k_unbind\tprot_k_bind_phys\n")
+                "prot_cooperativity\tprot_k_bind\tprot_k_unbind\tprot_k_bind_phys\t"
+                "global_ids_file\n")
         for i, (dataset, conc, coop, kb_phys) in enumerate(rows, start=1):
             dataset_dir = sprm_root / dataset
             storage_dir = storage_root / dataset
             k_bind_run = kb_phys / k_wrap_phys
             k_unbind_run = c0 * k_bind_run
+            ids_file = ids_root / ids_relpath(dataset, conc, coop)
             f.write(f"{i}\t{dataset}\t{dataset_dir}\t{storage_dir}\t{conc}\t{coop}\t"
-                    f"{k_bind_run:.10g}\t{k_unbind_run:.10g}\t{kb_phys:g}\n")
+                    f"{k_bind_run:.10g}\t{k_unbind_run:.10g}\t{kb_phys:g}\t{ids_file}\n")
 
     print(f"Wrote {len(rows)} tasks ({len(datasets)} datasets x {len(concs)} concs x "
           f"{len(coops)} coops x {len(kbinds_phys)} k_bind, {skipped} skipped by "

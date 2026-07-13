@@ -23,6 +23,7 @@ def run_gillespie_event(
     config: GillespieEventConfig,
     dataset_label: Optional[str] = None,
     max_nucs: Optional[int] = None,
+    global_ids: Optional[list] = None,
     logger: Optional[logging.Logger] = None,
 ) -> None:
     if logger is None:
@@ -59,11 +60,15 @@ def run_gillespie_event(
                 f"  Survival  = {survival_outfile}\n"
                 f"  Trajectories = {traj_outfile}")
 
+    if global_ids is not None:
+        logger.info(f"Restricting to {len(global_ids)} reachable global_ids "
+                    f"(from id-list).")
     gen = nucleosome_generator_sprm(
         dataset_dir=dataset_dir,
         k_wrap=config.k_wrap,
         kT=1.0,
         binding_sites=config.binding_sites,
+        global_ids=global_ids,
     )
     if max_nucs is not None:
         gen = itertools.islice(gen, max_nucs)

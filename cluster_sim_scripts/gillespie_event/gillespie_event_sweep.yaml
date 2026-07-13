@@ -1,12 +1,16 @@
 # Gillespie-event sweep + cluster config (single source of truth).
 #
 # Consumed by:
+#   - cluster_sim_scripts/gillespie_event/select_reachable_ids.py
+#         reads: markov_root, ids_root, sampling_n, sampling_cap,
+#                sweep.{datasets, prot_p_conc, prot_cooperativity}
 #   - cluster_sim_scripts/gillespie_event/generate_sweep_grid.py
-#         reads: sprm_root, storage_root, k_wrap_phys, prot_c0,
+#         reads: sprm_root, storage_root, ids_root, k_wrap_phys, prot_c0,
 #                sweep.{datasets, prot_p_conc, prot_cooperativity, prot_k_bind_phys}
 #   - src.gillespie_event.cli via --config (from launch_gillespie_event_sweep.job)
 #         reads: all top-level pipeline keys (k_wrap, tau_max, replicates, ...)
-#         silently ignores: sprm_root, storage_root, k_wrap_phys, prot_c0, sweep
+#         silently ignores: sprm_root, storage_root, markov_root, ids_root,
+#                sampling_n, sampling_cap, k_wrap_phys, prot_c0, sweep
 #
 # Per-task overrides supplied by launch_gillespie_event_sweep.job from sweep_grid.tsv:
 #   --dataset_dir, --storage_dir, --prot_p_conc, --prot_cooperativity,
@@ -22,13 +26,27 @@
 #   1. Edit this file
 #   2. python cluster_sim_scripts/gillespie_event/generate_sweep_grid.py --no-validate
 #   3. git add gillespie_event_sweep.yaml sweep_grid.tsv && git commit && git push
-#   # on the cluster:
+#   # on the cluster (AFTER the Markov sweep has finished — the sampler needs its output):
 #   4. git pull
-#   5. ./cluster_sim_scripts/gillespie_event/submit_sweep.sh
+#   5. python cluster_sim_scripts/gillespie_event/select_reachable_ids.py   # writes id-lists under ids_root
+#   6. ./cluster_sim_scripts/gillespie_event/submit_sweep.sh
+# The id-lists (ids_root) are NOT committed — regenerate on the cluster in step 5.
 
 # ── Sweep specification (read by generate_sweep_grid.py) ─────────────────────
 sprm_root: /group/pol_schiessel/Manish/HAMNucRetSeq_pipeline/SPRM_data
 storage_root: /group/pol_schiessel/Manish/Spermatogensis/output/gillespie_event_sweep_stable147_v1
+
+# Reachable-nucleosome sampling (Phase 2). select_reachable_ids.py reads the
+# Markov MFPT sweep at markov_root and, per (dataset, conc, coop) cell, writes an
+# id-list of up to sampling_n nucleosomes with Markov MFPT < sampling_cap (tau) to
+# ids_root. The Gillespie sweep runs ONLY those nucleosomes, so per-sim cost is set
+# by their (short) eviction time rather than tau_max. One id-list per cell is reused
+# across the whole k_bind ladder (MFPT depends only on the fixed c0). Low/zero-conc
+# cells may yield fewer than sampling_n (intrinsic unwrapping only) — see manifest.tsv.
+markov_root:  /group/pol_schiessel/Manish/Spermatogensis/output/markov_sweep_stable147_v1
+ids_root:     /group/pol_schiessel/Manish/Spermatogensis/output/gillespie_event_reachable_ids_v1
+sampling_n:   100
+sampling_cap: 5000.0
 
 sweep:
   datasets:
