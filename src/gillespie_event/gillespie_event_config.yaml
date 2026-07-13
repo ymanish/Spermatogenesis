@@ -20,8 +20,8 @@ prot_k_bind:        1.0
 prot_p_conc:        0.01
 prot_cooperativity: 4.5
 
-# ── Time / sampling (match the Markov log tau grid) ──────────────────────────
-tau_max:     20000.0
+# ── Time / sampling (IDENTICAL to the Markov log tau grid) ───────────────────
+tau_max:     100000.0
 tau_steps:   1000
 tau_spacing: log
 tau_log_min: 0.01

@@ -79,10 +79,14 @@ binding_sites: 14
 prot_k_unbind: 89.7
 prot_k_bind:   1.0
 
-# Time / sampling — match the Markov log tau grid. tau_max is a censoring
-# boundary; reachable nucleosomes (Markov MFPT below the sampling cap) evict well
-# before it, so 20000 comfortably captures the decay while bounding stragglers.
-tau_max:           20000.0
+# Time / sampling — IDENTICAL to the Markov log tau grid (markov_sweep.yaml:
+# tau_max=100000, tau_steps=1000, tau_spacing=log, tau_log_min=0.01) so the two
+# survival curves land on exactly the same abscissa and compare pointwise with no
+# interpolation. tau_max is only a censoring boundary: reachable nucleosomes
+# (Markov MFPT below the Phase-2 sampling cap) evict far earlier, so per-sim cost
+# is set by the eviction time, not by tau_max — raising the ceiling to 100000 is
+# essentially free and just avoids censoring the rare tail replicate.
+tau_max:           100000.0
 tau_steps:         1000
 tau_spacing:       log
 tau_log_min:       0.01
