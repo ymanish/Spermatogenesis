@@ -48,7 +48,7 @@ def parse_args():
 
     p.add_argument("--tau_max", type=float, default=None,
                    help="Censoring boundary in dimensionless time.")
-    p.add_argument("--n_survival_points", type=int, default=None,
+    p.add_argument("--tau_steps", type=int, default=None,
                    help="Resolution of empirical S(tau) grid.")
     p.add_argument("--tau_spacing", type=str, choices=["linear", "log"], default=None,
                    help="Empirical S(tau) grid spacing (match the Markov grid).")
@@ -108,7 +108,7 @@ def _resolve(args, cfg: dict) -> dict:
         "prot_p_conc":         pick(args.prot_p_conc, "prot_p_conc", 0.0),
         "prot_cooperativity":  pick(args.prot_cooperativity, "prot_cooperativity", 0.0),
         "tau_max":             pick(args.tau_max, "tau_max", 10000.0),
-        "n_survival_points":   pick(args.n_survival_points, "n_survival_points", 1000),
+        "tau_steps":   pick(args.tau_steps, "tau_steps", 1000),
         "tau_spacing":         pick(args.tau_spacing, "tau_spacing", "linear"),
         "tau_log_min":         pick(args.tau_log_min, "tau_log_min", 1e-2),
         "inf_protamine":       pick_bool(args.inf_protamine, "inf_protamine", True),
@@ -161,7 +161,7 @@ def main():
         prot_p_conc=p["prot_p_conc"],
         prot_cooperativity=p["prot_cooperativity"],
         tau_max=p["tau_max"],
-        n_survival_points=p["n_survival_points"],
+        tau_steps=p["tau_steps"],
         tau_spacing=p["tau_spacing"],
         tau_log_min=p["tau_log_min"],
         inf_protamine=p["inf_protamine"],

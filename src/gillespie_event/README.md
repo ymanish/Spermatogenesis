@@ -11,7 +11,7 @@ trajectories per SPRM dataset.
 python -m src.gillespie_event.cli \
     --dataset_dir SPRM_data/ret_all_stable147_refined \
     --storage_dir SPRM_output/gillespie_event \
-    --tau_max 50000 --n_survival_points 1000 \
+    --tau_max 50000 --tau_steps 1000 --tau_spacing log \
     --replicates 100 --n_workers 20 --batch_size 1
 ```
 

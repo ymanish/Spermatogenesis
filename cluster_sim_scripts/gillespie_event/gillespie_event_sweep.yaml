@@ -83,7 +83,7 @@ prot_k_bind:   1.0
 # boundary; reachable nucleosomes (Markov MFPT below the sampling cap) evict well
 # before it, so 20000 comfortably captures the decay while bounding stragglers.
 tau_max:           20000.0
-n_survival_points: 1000
+tau_steps:         1000
 tau_spacing:       log
 tau_log_min:       0.01
 

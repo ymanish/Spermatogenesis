@@ -2,7 +2,7 @@
 
 Mirrors the dataclass-style pattern of src.config.custom_type.SimulationConfig
 but lives in the new package so src/config/ is untouched. No sampling grid:
-tau_max is a censoring boundary, n_survival_points / tau_spacing / tau_log_min
+tau_max is a censoring boundary, tau_steps / tau_spacing / tau_log_min
 only control the empirical S(tau) grid resolution.
 """
 
@@ -54,7 +54,7 @@ class GillespieEventConfig:
 
         # Time / sampling
         tau_max: float = 10000.0,
-        n_survival_points: int = 1000,
+        tau_steps: int = 1000,
         tau_spacing: str = "linear",   # 'linear' or 'log' (match the Markov grid)
         tau_log_min: float = 1e-2,     # smallest nonzero tau for the log grid
 
@@ -72,10 +72,10 @@ class GillespieEventConfig:
     ):
         if tau_max <= 0:
             raise ValueError(f"tau_max must be > 0, got {tau_max}")
-        if n_survival_points < 2:
-            raise ValueError(f"n_survival_points must be >= 2, got {n_survival_points}")
+        if tau_steps < 2:
+            raise ValueError(f"tau_steps must be >= 2, got {tau_steps}")
         # Validate the grid spec eagerly (raises for bad spacing / tau_log_min).
-        build_tau_grid(tau_max, n_survival_points, tau_spacing, tau_log_min)
+        build_tau_grid(tau_max, tau_steps, tau_spacing, tau_log_min)
         if replicates < 1:
             raise ValueError(f"replicates must be >= 1, got {replicates}")
         if batch_size < 1:
@@ -92,7 +92,7 @@ class GillespieEventConfig:
         self.prot_cooperativity = prot_cooperativity
 
         self.tau_max = tau_max
-        self.n_survival_points = n_survival_points
+        self.tau_steps = tau_steps
         self.tau_spacing = tau_spacing
         self.tau_log_min = tau_log_min
 
@@ -107,7 +107,7 @@ class GillespieEventConfig:
 
         # NOTE: the survival-curve tau grid is NOT built here. The worker
         # (src/gillespie_event/batch.py) recomputes it from tau_max /
-        # n_survival_points so the grid never has to cross the process boundary.
+        # tau_steps so the grid never has to cross the process boundary.
         self.prot_params = {
             "k_unbind": prot_k_unbind,
             "k_bind": prot_k_bind,
@@ -133,7 +133,7 @@ class GillespieEventConfig:
             "prot_p_conc": self.prot_p_conc,
             "prot_cooperativity": self.prot_cooperativity,
             "tau_max": self.tau_max,
-            "n_survival_points": self.n_survival_points,
+            "tau_steps": self.tau_steps,
             "tau_spacing": self.tau_spacing,
             "tau_log_min": self.tau_log_min,
             "inf_protamine": self.inf_protamine,

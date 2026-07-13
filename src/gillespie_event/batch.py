@@ -24,7 +24,7 @@ def run_batch(
     batch: List[Nucleosome],
     prot_params: dict,
     tau_max: float,
-    n_survival_points: int,
+    tau_steps: int,
     inf_protamine: bool,
     replicates: int,
     save_trajectories: bool,
@@ -39,7 +39,7 @@ def run_batch(
         len(batch), replicates,
     )
 
-    tau_grid = build_tau_grid(tau_max, n_survival_points, tau_spacing, tau_log_min)
+    tau_grid = build_tau_grid(tau_max, tau_steps, tau_spacing, tau_log_min)
 
     aggs = []
     for nuc_idx, nuc in enumerate(batch):

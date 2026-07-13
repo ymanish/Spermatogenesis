@@ -9,7 +9,7 @@ def test_defaults_are_set():
     assert cfg.binding_sites == 14
     assert cfg.prot_k_unbind == 89.7
     assert cfg.tau_max == 10000.0
-    assert cfg.n_survival_points == 1000
+    assert cfg.tau_steps == 1000
     assert cfg.inf_protamine is True
     assert cfg.replicates == 20
     assert cfg.batch_size == 10
@@ -29,7 +29,7 @@ def test_prot_params_dict():
 @pytest.mark.parametrize("kwargs", [
     {"tau_max": 0.0},
     {"tau_max": -1.0},
-    {"n_survival_points": 1},
+    {"tau_steps": 1},
     {"replicates": 0},
     {"batch_size": 0},
     {"n_workers": 0},
