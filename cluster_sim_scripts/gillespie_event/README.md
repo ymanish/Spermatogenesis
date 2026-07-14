@@ -33,7 +33,11 @@ informative ones. See `notes/fast_protamine_review.md` for the physics.
 
 You run step 1 (the Markov sweep) and step 4 (the Gillespie sweep). Steps 2–3
 are quick prep in between. **Step 2 must run after the Markov sweep finishes** —
-it reads the Markov MFPT output.
+it reads the Markov MFPT output. Steps 2–3 run **locally** (where the Markov
+output lives); their outputs (`sweep_grid.tsv` + the id-lists under `ids_root`)
+are committed and carried to the cluster by `git push`/`pull`. The cluster does
+**not** need the Markov output — the id-lists already say which nucleosomes to
+run.
 
 | step | script | reads | produces |
 |------|--------|-------|----------|
@@ -42,19 +46,30 @@ it reads the Markov MFPT output.
 | 3 | `generate_sweep_grid.py` | `gillespie_event_sweep.yaml` + the id-lists' paths | `sweep_grid.tsv` — one row per (dataset, conc, coop, k_bind), each pointing at its id-list |
 | 4 | `submit_sweep.sh` → `launch_gillespie_event_sweep.job` → `src.gillespie_event.cli` | `sweep_grid.tsv` | Gillespie output under `<storage_root>/<dataset>/`: survival `S(τ)`, MFPT/RMST, trajectories — **only for the sampled nucleosomes** |
 
-### Commands (all on the cluster, after the Markov sweep finishes)
+### Commands
+
+Locally, where the Markov output lives (steps 2–3), then push:
 
 ```bash
-git pull
-
 # [2] sample reachable nucleosomes from the Markov MFPT output
 python cluster_sim_scripts/gillespie_event/select_reachable_ids.py
 #     inspect what each cell got before spending compute (path is `ids_root` from the yaml):
-column -t <ids_root>/manifest.tsv
+column -t cluster_sim_scripts/gillespie_event/reachable_ids/manifest.tsv
 
 # [3] build the task grid (references the id-lists)
-python cluster_sim_scripts/gillespie_event/generate_sweep_grid.py
+python cluster_sim_scripts/gillespie_event/generate_sweep_grid.py --no-validate
 
+# commit the artifacts so they reach the cluster
+git add cluster_sim_scripts/gillespie_event/gillespie_event_sweep.yaml \
+        cluster_sim_scripts/gillespie_event/sweep_grid.tsv \
+        cluster_sim_scripts/gillespie_event/reachable_ids
+git commit -m "gillespie sweep: regenerate id-lists + grid" && git push
+```
+
+Then on the cluster:
+
+```bash
+git pull
 # [4] submit the SLURM array
 ./cluster_sim_scripts/gillespie_event/submit_sweep.sh
 ```
@@ -98,33 +113,25 @@ rung** — so the ladder compares the *same* nucleosomes at `k_bind = 1, 10, 100
 
 ---
 
-## Sampling on your laptop instead of the cluster
+## Why the id-lists are committed
 
 The id-lists contain only integer `global_id`s, so their **contents are
-machine-independent** — sampling locally gives the identical nucleosome set. Two
-things to get right:
+machine-independent** — the nucleosome set is defined by the Markov MFPT, not by
+where anything runs. `ids_root` is a **repo-relative** path, so the id-lists are
+committed and `git push`/`pull` carries them to the cluster, where the `.job`
+(run from the repo root) resolves them. This is why steps 2–3 run locally, where
+the Markov output already sits, and the cluster needs only `git pull` + submit.
 
-1. Point the sampler at your local paths (the yaml defaults are cluster paths):
-   ```bash
-   python cluster_sim_scripts/gillespie_event/select_reachable_ids.py \
-       --markov_root /path/to/local/markov_output \
-       --out_dir     /path/to/local/ids
-   ```
-2. The cluster job reads id-lists from `ids_root` (baked into `sweep_grid.tsv` by
-   step 3). So after sampling locally, **copy the id-lists up to the cluster
-   `ids_root`** before submitting:
-   ```bash
-   rsync -av /path/to/local/ids/ <cluster>:<ids_root>/
-   ```
-
-Simplest is to run step 2 on the cluster where the Markov output already sits —
-then there is nothing to copy.
+If you ever move the Markov output, override the sampler's input with
+`--markov_root <path>` (or edit `markov_root` in the yaml).
 
 ---
 
-## Artifacts: what is committed vs regenerated
+## Artifacts: what is committed
 
-- **Committed:** `gillespie_event_sweep.yaml`, `sweep_grid.tsv` (regenerate with
-  step 3 whenever you edit the yaml, then commit + push + `git pull` on cluster).
-- **Not committed:** the id-lists under `ids_root` and `manifest.tsv` —
-  regenerate on the cluster with step 2 after each Markov run.
+All three are committed so a `git pull` on the cluster is fully sufficient to run:
+
+- `gillespie_event_sweep.yaml` — the config.
+- `sweep_grid.tsv` — regenerate (step 3) whenever you edit the yaml.
+- `reachable_ids/` — the id-lists + `manifest.tsv`; regenerate (step 2) after each
+  Markov run.
