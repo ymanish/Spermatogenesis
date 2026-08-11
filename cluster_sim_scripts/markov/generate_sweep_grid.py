@@ -41,7 +41,11 @@ def main():
     sprm_root = Path(cfg["sprm_root"])
     storage_root = Path(cfg["storage_root"])
     sweep = cfg["sweep"]
-    datasets = sweep["datasets"]
+    try:
+        datasets = [dataset.format_map(cfg) for dataset in sweep["datasets"]]
+    except (KeyError, ValueError) as exc:
+        print(f"ERROR: invalid dataset template: {exc}", file=sys.stderr)
+        sys.exit(1)
     concs = sweep["prot_p_conc"]
     coops = sweep["prot_cooperativity"]
 

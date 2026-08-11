@@ -21,18 +21,20 @@
 
 # ── Sweep specification (read by generate_sweep_grid.py) ─────────────────────
 sprm_root: /group/pol_schiessel/Manish/HAMNucRetSeq_pipeline/SPRM_data
-storage_root: /group/pol_schiessel/Manish/Spermatogensis/output/markov_sweep_stable147_v1
+storage_root: /group/pol_schiessel/Manish/Spermatogensis/output/markov_sweep_stable147_v1_two_adsorption
 
+E_out: 6.70
+E_in: 10.50
 sweep:
   datasets:
-    - ctrl01_random_genome_safe_stable147_refined
-    - ctrl02_random_genome_gcmatched_stable147_refined
-    - ctrl03_som_gcmatched_stable147_refined
-    - ctrl04_bound_prom_evicted_stable147_refined
-    - ctrl05_unbound_prom_yazdi_stable147_refined
-    - ret_all_stable147_refined
+    - ctrl01_random_genome_safe_stable147_refined_Eout_{E_out:.2f}_Ein{E_in:.2f}
+    - ctrl02_random_genome_gcmatched_stable147_refined_Eout_{E_out:.2f}_Ein{E_in:.2f}
+    - ctrl03_som_gcmatched_stable147_refined_Eout_{E_out:.2f}_Ein{E_in:.2f}
+    - ctrl04_bound_prom_evicted_stable147_refined_Eout_{E_out:.2f}_Ein{E_in:.2f}
+    - ctrl05_unbound_prom_yazdi_stable147_refined_Eout_{E_out:.2f}_Ein{E_in:.2f}
+    - ret_all_stable147_refined_Eout_{E_out:.2f}_Ein{E_in:.2f}
 
-  prot_p_conc:        [0.0, 0.01, 0.1, 1.0, 3.0, 10.0, 100.0, 1000.0]
+  prot_p_conc:        [0.0, 0.01, 0.1, 1.0, 3.0, 10.0, 20.0, 50.0, 65.0, 100.0, 1000.0]
   prot_cooperativity: [0.0, 4.5]
 
 # ── Markov solver defaults (read by the Markov CLI via --config) ─────────────
