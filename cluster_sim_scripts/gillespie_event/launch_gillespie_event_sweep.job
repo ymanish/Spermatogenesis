@@ -12,6 +12,7 @@
 #SBATCH --output=/home/pol_schiessel/maya620d/Spermatogenesis/log/gillespie_event_sweep_%A_%a.out
 #SBATCH --error=/home/pol_schiessel/maya620d/Spermatogenesis/log/gillespie_event_sweep_%A_%a.error
 #SBATCH --time=300:00:00
+#SBATCH --exclude=compute-0-[13-15]
 # NOTE: --array is provided on the sbatch command line by submit_sweep.sh.
 
 ################################################################################

@@ -29,3 +29,5 @@ venv/
 *.codex
 
 **.ipynb
+
+notebooks/
