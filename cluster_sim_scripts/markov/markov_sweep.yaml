@@ -21,7 +21,7 @@
 
 # ── Sweep specification (read by generate_sweep_grid.py) ─────────────────────
 sprm_root: /group/pol_schiessel/Manish/HAMNucRetSeq_pipeline/SPRM_data
-storage_root: /group/pol_schiessel/Manish/Spermatogensis/output/markov_sweep_stable147_v1_two_adsorption
+storage_root: /group/pol_schiessel/Manish/Spermatogensis/output/markov_sweep_stable147_v1_two_adsorption_gth
 
 E_out: 6.70
 E_in: 10.50
@@ -68,6 +68,11 @@ tau_steps: 1000
 tau_spacing: log
 tau_log_min: 0.01
 method: ode
+# MFPT solver. 'gth' (Grassmann-Taksar-Heyman state reduction) is exact to
+# machine precision at any stiffness. 'lu' is the previous solver, which lost
+# the slow unwrapping rate when the generator diagonal was formed and returned
+# either inf or values up to 24 decades too small, flagged 'ok'.
+mfpt_method: gth
 sparse: false
 
 # Execution (n_workers overridden by $SLURM_NTASKS in the .job)

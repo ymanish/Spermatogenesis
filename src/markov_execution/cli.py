@@ -98,6 +98,9 @@ def parse_args():
                         help="Limit number of nucleosomes processed (testing).")
 
     # Output toggles
+    parser.add_argument("--mfpt_method", type=str, default=None,
+                        choices=["gth", "lu"],
+                        help="MFPT solver: gth (default, exact) or lu (legacy, lossy)")
     parser.add_argument("--save_survival", action="store_true", default=None)
     parser.add_argument("--save_states", action="store_true", default=None)
     parser.add_argument("--save_mfpt", action="store_true", default=None)
@@ -154,6 +157,7 @@ def resolve_params(args, cfg: dict) -> dict:
         'tau_spacing':        pick(args.tau_spacing,             'tau_spacing',        'linear'),
         'tau_log_min':        pick(args.tau_log_min,             'tau_log_min',        1e-2),
         'method':             pick(args.method,                  'method',             'expm'),
+        'mfpt_method':        pick(args.mfpt_method,             'mfpt_method',        'gth'),
         'sparse':             pick_bool(args.sparse,             'sparse',             False),
         'batch_size':         pick(args.batch_size,              'batch_size',         10),
         'n_workers':          pick(args.n_workers,               'n_workers',          10),
@@ -215,6 +219,7 @@ def main():
         tau_spacing=p['tau_spacing'],
         tau_log_min=p['tau_log_min'],
         method=p['method'],
+        mfpt_method=p['mfpt_method'],
         sparse=p['sparse'],
         batch_size=p['batch_size'],
         n_workers=p['n_workers'],
@@ -243,6 +248,7 @@ def main():
         'tau_spacing':   config.tau_spacing,
         'tau_log_min':   config.tau_log_min,
         'method':        config.method,
+        'mfpt_method':   config.mfpt_method,
         'sparse':        config.sparse,
         'dimensionless': config.dimensionless,
     }

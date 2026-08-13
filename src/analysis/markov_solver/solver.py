@@ -5,7 +5,7 @@ from typing import Dict, Tuple, Optional
 import numpy as np
 
 from .generator import build_full_Q_from_nucleosome
-from .mfpt import compute_mfpt_from_Q_TT
+from .mfpt import compute_mfpt_from_Q_TT, compute_mfpt_gth
 from .survival import compute_survival
 
 
@@ -18,7 +18,8 @@ def solve_Q_TT_complete(
     sparse: bool = False,
     k_wrap: Optional[float] = None,
     protamine_params: Optional[Dict[str, float]] = None, 
-    dimensionless: bool = True
+    dimensionless: bool = True,
+    mfpt_method: str = 'gth'
 ) -> Dict:
     """
     Complete Q_TT analysis: build matrix, compute MFPT and survival function.
@@ -65,7 +66,7 @@ def solve_Q_TT_complete(
         >>> print(f"MFPT = {results['mfpt']:.4f} (dimensionless)")
     """
     # Build Q_TT matrix
-    Q_full, Q_TT, _, states, state_index, abs_index = build_full_Q_from_nucleosome(
+    Q_full, Q_TT, Q_AT, states, state_index, abs_index = build_full_Q_from_nucleosome(
         nucleosome, k_wrap=k_wrap, sparse=sparse, protamine_params=protamine_params, dimensionless=dimensionless
     )
     
@@ -73,7 +74,12 @@ def solve_Q_TT_complete(
     k_wrap_val = k_wrap if k_wrap is not None else nucleosome.k_wrap
     
     # Compute MFPT
-    mfpt, mfpt_vector, mfpt_flag = compute_mfpt_from_Q_TT(Q_TT, state_index, start_state)
+    if mfpt_method == 'gth':
+        mfpt, mfpt_vector, mfpt_flag = compute_mfpt_gth(Q_TT, Q_AT, state_index, start_state)
+    elif mfpt_method == 'lu':
+        mfpt, mfpt_vector, mfpt_flag = compute_mfpt_from_Q_TT(Q_TT, state_index, start_state)
+    else:
+        raise ValueError(f"unknown mfpt_method {mfpt_method!r}; use 'gth' or 'lu'")
 
     # Compute survival function
     tau_grid = np.linspace(0, tau_max, n_points)

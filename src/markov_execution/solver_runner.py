@@ -14,7 +14,8 @@ from src.core.nucleosomes import Nucleosome
 from src.analysis.markov_solver import (
     build_full_Q_from_nucleosome,
     compute_survival,
-    compute_mfpt_from_Q_TT
+    compute_mfpt_from_Q_TT,
+    compute_mfpt_gth
 )
 
 
@@ -29,7 +30,8 @@ def solve_single_nucleosome(
     sparse: bool = False,
     dimensionless: bool = True,
     compute_states: bool = False,
-    start_state: Tuple[int, int] = (0, 0)
+    start_state: Tuple[int, int] = (0, 0),
+    mfpt_method: str = 'gth'
 ) -> dict:
     """
     Solve Markov chain for a single nucleosome.
@@ -88,8 +90,15 @@ def solve_single_nucleosome(
         )
         P_states = None
     
-    # Compute MFPT
-    mfpt, tau_vec, mfpt_flag = compute_mfpt_from_Q_TT(Q_TT, state_index, start_state)
+    # Compute MFPT. 'gth' is the default because the 'lu' path silently loses
+    # the slow unwrapping rate when the generator diagonal is formed; see
+    # src/analysis/markov_solver/mfpt.py. 'lu' is kept only for comparison runs.
+    if mfpt_method == 'gth':
+        mfpt, tau_vec, mfpt_flag = compute_mfpt_gth(Q_TT, Q_AT, state_index, start_state)
+    elif mfpt_method == 'lu':
+        mfpt, tau_vec, mfpt_flag = compute_mfpt_from_Q_TT(Q_TT, state_index, start_state)
+    else:
+        raise ValueError(f"unknown mfpt_method {mfpt_method!r}; use 'gth' or 'lu'")
 
     # Package results
     results = {

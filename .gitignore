@@ -31,3 +31,4 @@ venv/
 **.ipynb
 
 notebooks/
+tests/

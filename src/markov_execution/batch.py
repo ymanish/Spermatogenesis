@@ -85,6 +85,7 @@ def run_batch_markov(
             kT=config.kT,
             binding_sites=config.binding_sites,
             method=config.method,
+            mfpt_method=config.mfpt_method,
             sparse=config.sparse,
             dimensionless=config.dimensionless,
             compute_states=save_states,

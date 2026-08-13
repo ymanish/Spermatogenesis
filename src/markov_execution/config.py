@@ -92,6 +92,9 @@ class MarkovConfig:
     tau_spacing: str = 'linear'   # 'linear' or 'log' (survival-curve τ grid)
     tau_log_min: float = 1e-2     # smallest nonzero τ for the log grid (ignored when linear)
     method: str = 'expm'  # 'expm' or 'ode'
+    mfpt_method: str = 'gth'  # 'gth' or 'lu'; see src/analysis/markov_solver/mfpt.py.
+                              # 'lu' loses the slow unwrapping rate when the generator
+                              # diagonal is formed and is kept only for comparison runs.
     sparse: bool = False
     compute_states: bool = False
     dimensionless: bool = True
@@ -170,6 +173,9 @@ class MarkovConfig:
         
         if self.method not in ['expm', 'ode']:
             raise ValueError(f"method must be 'expm' or 'ode', got {self.method}")
+
+        if self.mfpt_method not in ['gth', 'lu']:
+            raise ValueError(f"mfpt_method must be 'gth' or 'lu', got {self.mfpt_method}")
         
         if self.n_workers <= 0:
             raise ValueError(f"n_workers must be positive, got {self.n_workers}")
@@ -201,6 +207,7 @@ class MarkovConfig:
             'tau_spacing': self.tau_spacing,
             'tau_log_min': self.tau_log_min,
             'method': self.method,
+            'mfpt_method': self.mfpt_method,
             'sparse': self.sparse,
             'n_workers': self.n_workers,
             'batch_size': self.batch_size

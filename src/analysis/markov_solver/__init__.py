@@ -22,7 +22,7 @@ from .solver import (solve_Q_TT_complete)
 
 from .state_space import (build_state_space)
 from .generator import (build_full_Q_from_nucleosome)
-from .mfpt import (compute_mfpt_from_Q_TT)
+from .mfpt import (compute_mfpt_from_Q_TT, compute_mfpt_gth)
 from .survival import compute_survival
 from .nucleosome_utils import load_nucleosomes_from_file
 from .projection import (project_to_open_sites, compute_open_sites_evolution)
@@ -34,6 +34,7 @@ __all__ = [
     'build_state_space',
     'build_full_Q_from_nucleosome',
     'compute_mfpt_from_Q_TT',
+    'compute_mfpt_gth',
     'compute_survival',
     'load_nucleosomes_from_file',
     'project_to_open_sites',

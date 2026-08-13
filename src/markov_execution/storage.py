@@ -96,6 +96,14 @@ class MarkovStorage:
             'tau_spacing': params.get('tau_spacing'),
             'tau_log_min': params.get('tau_log_min'),
             'method': params.get('method'),
+            # Included so a GTH run cannot land in an LU run's directory.
+            # NOTE: adding this key changes the hash of EVERY parameter set, including
+            # ones written before it existed (a pre-GTH run stored under 02dda8 now
+            # re-derives as 7d9add). Directories already on disk are unaffected and
+            # remain readable, because rebuild_index() finds runs by scanning for
+            # parameters.json rather than by recomputing hashes. Only re-deriving an
+            # old directory's name from its parameters would miss, which nothing does.
+            'mfpt_method': params.get('mfpt_method'),
             'prot_params': params.get('prot_params'),
             'binding_sites': params.get('binding_sites'),
             'sparse': params.get('sparse'),
@@ -197,6 +205,7 @@ class MarkovStorage:
             'tau_max': params.get('tau_max'),
             'tau_steps': params.get('tau_steps'),
             'method': params.get('method'),
+            'mfpt_method': params.get('mfpt_method'),   # None for pre-GTH runs
             'k_bind': prot.get('k_bind'),
             'k_unbind': prot.get('k_unbind'),
             'p_conc': prot.get('p_conc'),
