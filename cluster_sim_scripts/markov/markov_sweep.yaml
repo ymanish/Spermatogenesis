@@ -59,7 +59,7 @@ prot_k_unbind: 89.7
 prot_k_bind: 1.0
 
 # Computation
-tau_max: 100000.0
+tau_max: 10000000.0 ### Spermiogenesis take 24 days approx, set by k_wrap=21 sec-1
 tau_steps: 1000
 # Survival-curve tau grid: 'log' concentrates points where S(tau) drops and is
 # sparse in the smooth tail (better shape + Gillespie comparison at far fewer
