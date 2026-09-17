@@ -131,7 +131,7 @@ inf_protamine: true
 replicates:    10
 
 # Execution (n_workers overridden by $SLURM_NTASKS in the .job)
-batch_size:  2
+batch_size:  1
 n_workers:   20
 flush_every: 10000
 
