@@ -38,7 +38,7 @@
 
 # ── Sweep specification (read by generate_sweep_grid.py) ─────────────────────
 sprm_root: /group/pol_schiessel/Manish/HAMNucRetSeq_pipeline/SPRM_data
-storage_root: /group/pol_schiessel/Manish/Spermatogensis/output/gillespie_event_sweep_stable147_v1_two_adsorption
+storage_root: /group/pol_schiessel/Manish/Spermatogensis/output/gillespie_event_sweep_stable147_v1_two_adsorption_gth
 
 # Reachable-nucleosome sampling (Phase 2). select_reachable_ids.py reads the
 # Markov MFPT sweep at markov_root and, per (dataset, conc, coop) cell, writes an
@@ -50,10 +50,17 @@ storage_root: /group/pol_schiessel/Manish/Spermatogensis/output/gillespie_event_
 #
 # markov_root is a LOCAL path (the sampler runs where the Markov output lives).
 # ids_root is REPO-RELATIVE so the id-lists are committed and resolve on the cluster.
-markov_root:  output/markov_sweep_stable147_v1_two_adsorption
+markov_root:  output/markov_sweep_stable147_v1_two_adsorption_gth
 ids_root:     cluster_sim_scripts/gillespie_event/reachable_ids
-sampling_n:   100
-sampling_cap: 5000.0
+sampling_n:   50
+sampling_cap: 1000000.0
+# Pad cells that have fewer than sampling_n reachable nucleosomes up to sampling_n,
+# taking the "nearest misses" (smallest mfpt at/above sampling_cap) first. Those
+# nucleosomes have mfpt >= the observation window, so their replicates run the full
+# tau_max and are largely CENSORED — they equalise N per cell but carry little
+# survival signal. manifest.tsv records how many are filler (n_filler); split on it
+# before pooling survival curves. Set false (or pass --no_top_up) for reachable-only.
+sampling_top_up: true
 
 E_out: 6.70
 E_in: 10.50
@@ -68,7 +75,7 @@ sweep:
     - ret_all_stable147_refined_Eout_{E_out:.2f}_Ein{E_in:.2f}
 
   # Match the Markov sweep grid exactly (markov_sweep.yaml).
-  prot_p_conc:        [0.0, 0.01, 0.1, 1.0, 3.0, 10.0, 100.0, 1000.0]
+  prot_p_conc:        [50.0, 1000.0]  # uM
   prot_cooperativity: [0.0, 4.5]
 
   # Fast-protamine convergence ladder: PHYSICAL on-rate k_bind (uM^-1 s^-1).
@@ -114,7 +121,7 @@ prot_k_bind:   1.0
 # (Markov MFPT below the Phase-2 sampling cap) evict far earlier, so per-sim cost
 # is set by the eviction time, not by tau_max — raising the ceiling to 100000 is
 # essentially free and just avoids censoring the rare tail replicate.
-tau_max:           100000.0
+tau_max:           1000000.0
 tau_steps:         1000
 tau_spacing:       log
 tau_log_min:       0.01

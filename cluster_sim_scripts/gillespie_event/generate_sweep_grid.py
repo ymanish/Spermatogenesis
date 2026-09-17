@@ -22,7 +22,7 @@ import yaml
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from sampling_paths import ids_relpath  # noqa: E402
+from sampling_paths import ids_relpath, resolve_datasets  # noqa: E402
 
 
 def main():
@@ -43,7 +43,7 @@ def main():
     sprm_root = Path(cfg["sprm_root"])
     storage_root = Path(cfg["storage_root"])
     sweep = cfg["sweep"]
-    datasets = sweep["datasets"]
+    datasets = resolve_datasets(cfg)
     concs = sweep["prot_p_conc"]
     coops = sweep["prot_cooperativity"]
     kbinds_phys = sweep["prot_k_bind_phys"]

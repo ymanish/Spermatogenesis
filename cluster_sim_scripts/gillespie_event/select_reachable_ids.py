@@ -16,8 +16,12 @@ reused for every k_bind rung by the sweep — a paired comparison.
 
 Reachability is strongly cell-dependent: high-concentration cells have thousands
 of reachable nucleosomes, while conc=0 / low-conc cells (intrinsic unwrapping
-only) may have far fewer than N. This script takes min(N, n_reachable) and
-records both counts in manifest.tsv so the shortfall is visible before you run.
+only) may have far fewer than N. Short cells are padded back up to N with the
+"nearest misses" — the smallest-MFPT nucleosomes at or above the cap (disable
+with --no_top_up / sampling_top_up: false). Filler has MFPT beyond the cap, so
+those replicates run the full tau_max and are largely censored; manifest.tsv
+records n_reachable, n_selected and n_filler per cell so the composition is
+visible before you run, and so survival curves can be split on it afterwards.
 
 Workflow (run AFTER the Markov sweep finishes, BEFORE generate_sweep_grid.py):
     python cluster_sim_scripts/gillespie_event/select_reachable_ids.py \
@@ -38,7 +42,7 @@ import yaml
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from sampling_paths import ids_relpath  # noqa: E402
+from sampling_paths import ids_relpath, resolve_datasets  # noqa: E402
 
 
 # ── Pure core (unit-tested) ──────────────────────────────────────────────────
@@ -65,6 +69,33 @@ def select_ids(summary: pd.DataFrame, cap: float, n: int, seed: int):
     return sorted(int(x) for x in chosen), n_reachable
 
 
+def top_up_ids(summary: pd.DataFrame, cap: float, already, n: int):
+    """Fill a short cell up to ``n`` with the "nearest misses" above ``cap``.
+
+    Cells with fewer than ``n`` reachable nucleosomes are topped up from the
+    unreachable pool, taking the SMALLEST mfpt first (ties broken by subid, so
+    the result is deterministic and needs no seed).
+
+    Nearest-first matters: with the cap set at tau_max these nucleosomes have
+    mfpt at or beyond the observation window, so their replicates are censored
+    and run the full tau_max. Drawing uniformly would land near the pool median
+    — often many orders of magnitude past the window — for identical cost and no
+    signal, whereas the nearest misses sit close enough that a real fraction of
+    replicates still evict in-window. Filler is counted separately in
+    manifest.tsv (``n_filler``) because it is censored by construction.
+    """
+    shortfall = n - len(already)
+    if shortfall <= 0:
+        return []
+    taken = {int(x) for x in already}
+    ok = summary["mfpt_flag"] == "ok"
+    finite = np.isfinite(summary["mfpt"])
+    pool = summary[ok & finite & (summary["mfpt"] >= cap)
+                   & ~summary["subid"].isin(taken)]
+    pool = pool.sort_values(["mfpt", "subid"], kind="mergesort")
+    return [int(x) for x in pool["subid"].to_numpy()[:shortfall]]
+
+
 def _seed_for(seed_base: int, dataset: str, conc: float, coop: float) -> int:
     """Stable per-cell seed so each (dataset, conc, coop) samples reproducibly."""
     key = f"{seed_base}|{dataset}|{conc:g}|{coop:g}"
@@ -72,6 +103,26 @@ def _seed_for(seed_base: int, dataset: str, conc: float, coop: float) -> int:
 
 
 # ── IO / orchestration ───────────────────────────────────────────────────────
+def _require_dataset_dir(markov_root: Path, dataset: str) -> Path:
+    """Fail loudly if a dataset has no directory under ``markov_root``.
+
+    Without this every (conc, coop) lookup for the dataset misses and the run
+    writes a manifest of -1 / ``reachable=MISSING`` while leaving any stale
+    id-lists untouched — a silent no-op that only shows up in the log.
+    """
+    ddir = markov_root / dataset
+    if ddir.is_dir():
+        return ddir
+    available = sorted(p.name for p in markov_root.iterdir() if p.is_dir())
+    raise SystemExit(
+        f"ERROR: no Markov dataset directory: {ddir}\n"
+        f"  {len(available)} dataset(s) present under {markov_root}:\n"
+        + "".join(f"    - {a}\n" for a in available)
+        + "  (Unexpanded '{...}' in the name means the sweep YAML template was "
+          "not resolved.)"
+    )
+
+
 def _index_markov_cells(markov_root: Path, dataset: str):
     """Map (conc, coop) -> summary TSV path by reading each cell's parameters.json.
 
@@ -101,11 +152,14 @@ def main():
     ap.add_argument("--cap", type=float, default=None,
                     help="Reachability cap: keep nucleosomes with Markov mfpt < cap.")
     ap.add_argument("--seed_base", type=int, default=20250713)
+    ap.add_argument("--no_top_up", action="store_true",
+                    help="Do NOT pad short cells with nearest-miss nucleosomes "
+                         "(overrides yaml sampling_top_up).")
     args = ap.parse_args()
 
     cfg = yaml.safe_load(args.config.read_text())
     sweep = cfg["sweep"]
-    datasets = sweep["datasets"]
+    datasets = resolve_datasets(cfg)
     concs = [float(c) for c in sweep["prot_p_conc"]]
     coops = [float(c) for c in sweep["prot_cooperativity"]]
 
@@ -113,17 +167,19 @@ def main():
     out_dir = args.out_dir or Path(cfg["ids_root"])
     n = args.n if args.n is not None else int(cfg.get("sampling_n", 100))
     cap = args.cap if args.cap is not None else float(cfg.get("sampling_cap", 5000.0))
+    top_up = False if args.no_top_up else bool(cfg.get("sampling_top_up", True))
 
     if not markov_root.is_dir():
         sys.exit(f"ERROR: markov_root not found: {markov_root}")
 
     print(f"markov_root = {markov_root}")
     print(f"out_dir     = {out_dir}")
-    print(f"n = {n}   cap = {cap:g}\n")
+    print(f"n = {n}   cap = {cap:g}   top_up = {top_up}\n")
 
     manifest = []
     kbind0_conc_collapsed = 0
     for dataset in datasets:
+        _require_dataset_dir(markov_root, dataset)
         cells = _index_markov_cells(markov_root, dataset)
         for conc, coop in itertools.product(concs, coops):
             # Same conc=0 collapse the sweep uses: no protamine -> coop irrelevant.
@@ -135,33 +191,60 @@ def main():
             if summ is None:
                 print(f"  WARN: no Markov cell for {dataset} conc={conc:g} coop={coop:g}",
                       file=sys.stderr)
-                manifest.append((dataset, conc, coop, -1, 0, str(rel)))
+                manifest.append((dataset, conc, coop, -1, 0, 0, str(rel)))
                 continue
             df = pd.read_csv(summ, sep="\t")
             seed = _seed_for(args.seed_base, dataset, conc, coop)
             ids, n_reach = select_ids(df, cap=cap, n=n, seed=seed)
 
+            filler = top_up_ids(df, cap, ids, n) if top_up else []
+            ids = sorted(ids + filler)
+
             out_path = out_dir / rel
             out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_text("".join(f"{i}\n" for i in ids))
-            flag = "" if len(ids) >= n else f"  <-- SHORT ({len(ids)}/{n})"
+            # '#' lines are skipped by the CLI reader (_load_global_ids), so the
+            # provenance travels with the id-list without changing its contract.
+            header = (f"# {dataset} conc={conc:g} coop={coop:g}\n"
+                      f"# cap={cap:g} n_reachable={n_reach} "
+                      f"n_selected={len(ids)} n_filler={len(filler)}\n")
+            out_path.write_text(header + "".join(f"{i}\n" for i in ids))
+            if len(ids) < n:
+                note = f"  <-- SHORT ({len(ids)}/{n})"
+            elif filler:
+                note = f"  ({len(ids) - len(filler)} reachable + {len(filler)} filler)"
+            else:
+                note = ""
             print(f"  {dataset[:28]:28s} conc={conc:<7g} coop={coop:<4g} "
-                  f"reachable={n_reach:6d} selected={len(ids):4d}{flag}")
-            manifest.append((dataset, conc, coop, n_reach, len(ids), str(rel)))
+                  f"reachable={n_reach:6d} selected={len(ids):4d}{note}")
+            manifest.append((dataset, conc, coop, n_reach, len(ids), len(filler), str(rel)))
 
     out_dir.mkdir(parents=True, exist_ok=True)
     man_path = out_dir / "manifest.tsv"
     with open(man_path, "w") as f:
-        f.write("dataset\tprot_p_conc\tprot_cooperativity\tn_reachable\tn_selected\tids_file\n")
+        f.write("dataset\tprot_p_conc\tprot_cooperativity\tn_reachable\tn_selected\t"
+                "n_filler\tids_file\n")
         for row in manifest:
             f.write("\t".join(str(x) for x in row) + "\n")
 
     short = [m for m in manifest if m[4] < n]
-    print(f"\nWrote {len(manifest)} id-lists + {man_path}")
+    written = [m for m in manifest if m[3] >= 0]   # MISSING cells write no file
+    print(f"\nWrote {len(written)} id-lists + {man_path}")
+    if len(written) != len(manifest):
+        print(f"WARNING: {len(manifest) - len(written)} cell(s) had no Markov "
+              f"summary and were NOT written — any existing id-list for them is stale.",
+              file=sys.stderr)
     print(f"({kbind0_conc_collapsed} conc=0/coop>0 cells collapsed, matching the sweep)")
+
+    padded = [m for m in manifest if m[5] > 0]
+    if padded:
+        print(f"{len(padded)} cell(s) padded to N={n} with nearest-miss filler "
+              f"({sum(m[5] for m in padded)} nucleosomes total).")
+        print("  Filler has mfpt >= cap, so those replicates run the full tau_max "
+              "and are largely censored —")
+        print("  split on n_filler in manifest.tsv before pooling survival curves.")
     if short:
-        print(f"{len(short)} cell(s) below N={n} (mostly low/zero conc — expected):")
-        for d, c, j, nr, ns, _ in short:
+        print(f"{len(short)} cell(s) below N={n} (pool exhausted or no Markov cell):")
+        for d, c, j, nr, ns, nf, _ in short:
             print(f"    {d[:28]:28s} conc={c:<7g} coop={j:<4g} -> {ns} "
                   f"(reachable={nr if nr >= 0 else 'MISSING'})")
 
